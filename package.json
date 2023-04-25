@@ -1,6 +1,6 @@
 {
   "name": "impetus",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "impetus toolkit for svelte apps",
   "main": "lib/index.js",
   "directories": {

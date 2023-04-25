@@ -15,7 +15,7 @@ export const transform = (pages = []) => {
 const propertyMaper = {
   'rich_text': (p) => p.rich_text[0]?.plain_text,
   'title': (p) => p.title[0]?.text.content,
-  'date': (p) => new Date(p.date.start),
+  'date': (p) => p.date?.start ? new Date(p.date.start) : null,
   'checkbox': (p) => p.checkbox,
   'select': (p) => p.select?.name,
   'files': (p) => p.files[0]?.external.url,
