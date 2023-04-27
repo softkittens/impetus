@@ -20,6 +20,7 @@ const propertyMaper = {
   'select': (p) => p.select?.name,
   'files': (p) => p.files[0]?.external.url,
   'url': (p) => p.url,
+  'number': (p) => p.number,
   'relation': (p) => p.relation[0]?.id,
   'multi_select': (p) => p.multi_select.map(ms => ms.name),
   'rollup': (p) => p.rollup.array.length ? propertyMaper[p.rollup.array[0].type](p.rollup.array[0]) : '',
