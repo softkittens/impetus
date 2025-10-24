@@ -59,13 +59,27 @@ function evalInScope(expr: string, state: Scope, $event?: Event) {
 
 function assignInScope(path: string, state: Scope, value: any) {
   try {
-    let fn = assignCache.get(path);
-    if (!fn) {
-      // eslint-disable-next-line no-new-func
-      fn = new Function('state', '__v', `with(state){ return (${path} = __v) }`);
-      assignCache.set(path, fn);
+    const segments = String(path).split('.').map(s => s.trim()).filter(Boolean);
+    if (!segments.length) return undefined;
+    const first = segments[0] as PropertyKey;
+    // Find the nearest owner in the prototype chain that defines the first segment
+    let owner: any = state;
+    let cur: any = state;
+    while (cur && !Object.prototype.hasOwnProperty.call(cur, first)) {
+      cur = Object.getPrototypeOf(cur);
     }
-    return fn(state, value);
+    if (cur) owner = cur;
+    // Resolve target for nested assignment
+    let target = owner;
+    for (let i = 0; i < segments.length - 1; i++) {
+      const k = segments[i] as any;
+      if (target == null) return undefined;
+      target = target[k];
+    }
+    const last = segments[segments.length - 1] as any;
+    if (target == null) return undefined;
+    target[last] = value;
+    return value;
   } catch (e) {
     console.warn('sparkle: assign error', path, e);
     return undefined;
@@ -203,9 +217,16 @@ function handleIfDirective(el: Element, expr: string, state: Scope): void {
   if (show) {
     if (placeholder.nextSibling !== el) {
       try { parent.insertBefore(el, placeholder.nextSibling); } catch {}
+      // Ensure events are wired for newly inserted subtree
+      try { wireEventHandlers(el, state); } catch {}
     }
     if (elseSibling?.parentNode) {
-      try { elseSibling.parentNode.removeChild(elseSibling); } catch {}
+      // Hide else sibling if present
+      try {
+        (elseSibling as HTMLElement).setAttribute('hidden','');
+        (elseSibling as HTMLElement).setAttribute('aria-hidden','true');
+        (elseSibling as HTMLElement).style.display = 'none';
+      } catch {}
     }
   } else {
     if (el.parentNode) {
@@ -213,20 +234,24 @@ function handleIfDirective(el: Element, expr: string, state: Scope): void {
     }
     if (elseSibling && placeholder.nextSibling !== elseSibling) {
       try { parent.insertBefore(elseSibling, placeholder.nextSibling); } catch {}
+      // Wire events on else block subtree as it becomes active
+      try { wireEventHandlers(elseSibling, state); } catch {}
+    }
+    // Show else sibling
+    if (elseSibling) {
+      try {
+        elseSibling.removeAttribute('hidden');
+        elseSibling.removeAttribute('aria-hidden');
+        (elseSibling as HTMLElement).style.removeProperty('display');
+      } catch {}
     }
   }
 }
 
 function findElseSibling(el: Element): Element | null {
-  let sibling = el.nextElementSibling;
-  while (sibling) {
-    if (DIRECTIVES.ELSE.has(sibling.getAttribute('s-else') ? 's-else' : '') ||
-        DIRECTIVES.ELSE.has(sibling.getAttribute('@else') ? '@else' : '')) {
-      return sibling;
-    }
-    if (!isDirective(sibling.tagName)) break;
-    break;
-  }
+  const sibling = el.nextElementSibling;
+  if (!sibling) return null;
+  if (sibling.hasAttribute('s-else') || sibling.hasAttribute('@else')) return sibling;
   return null;
 }
 
@@ -235,9 +260,11 @@ function handleShowDirective(el: Element, expr: string, state: Scope): void {
   if (visible) {
     el.removeAttribute('hidden');
     el.removeAttribute('aria-hidden');
+    try { (el as HTMLElement).style.removeProperty('display'); } catch {}
   } else {
     el.setAttribute('hidden', '');
     el.setAttribute('aria-hidden', 'true');
+    try { (el as HTMLElement).style.display = 'none'; } catch {}
   }
 }
 
@@ -283,9 +310,10 @@ function handleEachDirective(el: Element, expr: string, state: Scope, root: Elem
     try { child.parentNode?.removeChild(child); } catch {}
   }
   
-  // Render new children
+  // Render new children (preserve order with moving anchor)
   const template = eachTemplates.get(el) as Element;
   const newChildren: Element[] = [];
+  let anchor: Node = placeholder;
   
   for (let i = 0; i < items.length; i++) {
     const clone = template.cloneNode(true) as Element;
@@ -294,10 +322,11 @@ function handleEachDirective(el: Element, expr: string, state: Scope, root: Elem
       clone.removeAttribute('@each');
     } catch {}
     
-    try { parent.insertBefore(clone, placeholder.nextSibling); } catch {}
+    try { parent.insertBefore(clone, anchor.nextSibling); anchor = clone; } catch {}
     
     // Create extended state with item and index
     const extendedState: any = Object.create(state);
+    try { extendedState.$root = state; } catch {}
     extendedState[itemKey] = items[i];
     extendedState[idxKey] = i;
     
@@ -394,27 +423,43 @@ function renderBindings(state: Scope, root: Element) {
       else b.el.removeAttribute("style");
       continue;
     }
-    const v = evalInScope(expr, state);
+    // Handle value property binding explicitly
     if (attrName === "value") {
+      const v = evalInScope(expr, state);
       setValueProp(b.el, v);
       if (v == null || v === false) b.el.removeAttribute("value");
       else b.el.setAttribute("value", String(v));
       continue;
     }
+    // Support mixed template replacement for generic attributes
+    const rawVal = (b as any).expr as string;
+    if (rawVal && rawVal.includes('{') && attrName !== 'class' && attrName !== 'style') {
+      const replaced = rawVal.replace(/\{([^}]+)\}/g, (_, ex) => {
+        const val = evalInScope(unwrapExpr(String(ex)), state);
+        return val == null ? '' : String(val);
+      });
+      if (replaced === '') {
+        b.el.removeAttribute(attrName);
+      } else {
+        b.el.setAttribute(attrName, replaced);
+      }
+      continue;
+    }
     if (BOOLEAN_ATTRS.has(attrName)) {
-      const boolVal = Boolean(v);
+      const boolVal = Boolean(evalInScope(expr, state));
       setBooleanProp(b.el, attrName, boolVal);
       if (boolVal) b.el.setAttribute(attrName, "");
       else b.el.removeAttribute(attrName);
       continue;
     }
     // Generic attribute binding
-    if (v === false || v == null) {
+    const gv = evalInScope(expr, state);
+    if (gv === false || gv == null) {
       b.el.removeAttribute(attrName);
-    } else if (v === true) {
+    } else if (gv === true) {
       b.el.setAttribute(attrName, "");
     } else {
-      b.el.setAttribute(attrName, String(v));
+      b.el.setAttribute(attrName, String(gv));
     }
   }
 
@@ -553,9 +598,19 @@ function collectBindingsForRoot(root: Element) {
 
   // Attribute bindings
   const abinds: AttrBinding[] = [];
-  const all = root.querySelectorAll("*");
+  const all = [root, ...Array.from(root.querySelectorAll("*"))] as Element[];
   all.forEach((el) => {
-    for (const { name, value } of Array.from(el.attributes)) {
+    const attrs = Array.from(el.attributes);
+    const hasEach = attrs.some(a => a.name === 's-each' || a.name === '@each');
+    for (const { name, value } of attrs) {
+      // Never treat event handlers as attribute bindings
+      if (name.startsWith('on')) continue;
+      // Skip component infra attributes
+      if (name === 'props' || name === 'use' || name === 'template') continue;
+      if (hasEach && !(name === 's-each' || name === '@each') && !name.startsWith('on')) {
+        // When an element declares @each, skip non-event attrs on template holder (events are wired per clone)
+        continue;
+      }
       // Two-way model shorthand: :value="expr"
       if (name === ':value') {
         abinds.push({ el, attr: 'value', expr: value || "" });
@@ -607,11 +662,20 @@ function isInsideEachTemplate(element: Element | null): boolean {
 
 function wireEventHandlers(root: Element, state: Scope) {
   const listeners: { el: Element; event: string; handler: EventListener }[] = [];
-  const all = root.querySelectorAll("*");
+  const all = [root, ...Array.from(root.querySelectorAll("*"))] as Element[];
   all.forEach((el) => {
+    // Skip if element has its own state that differs from what we're wiring
+    const mapped = rootStateMap.get(el);
+    if (mapped && mapped !== state && el !== root) {
+      return; // child element managed by different scope
+    }
+    // Skip elements with @each - they're templates that will be cloned
+    if (el.hasAttribute('s-each') || el.hasAttribute('@each')) {
+      return;
+    }
     // Auto-wire two-way model if present
-    if ((el as Element).hasAttribute('data-model')) {
-      const path = (el as Element).getAttribute('data-model') || '';
+    if (el.hasAttribute('data-model')) {
+      const path = el.getAttribute('data-model') || '';
       const tag = el.tagName;
       let evt = 'input';
       if (tag === 'SELECT') evt = 'change';
@@ -649,7 +713,8 @@ function wireEventHandlers(root: Element, state: Scope) {
                 return !(el.contains(ev.target as Node));
               }
               // @ts-ignore
-              return t[p];
+              const v = (t as any)[p];
+              return typeof v === 'function' ? v.bind(t) : v;
             }
           });
           evalInScope(value, state, wrapped as any);
@@ -659,6 +724,7 @@ function wireEventHandlers(root: Element, state: Scope) {
         const useCapture = needsOutside ? true : false;
         target.addEventListener(event, handler as EventListener, useCapture);
         listeners.push({ el: target as any, event, handler: handler as EventListener });
+        // remove inline to avoid global-scope eval
         try { el.removeAttribute(name); } catch {}
       }
     }

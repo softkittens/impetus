@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sparkle: tabs</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="min-h-dvh bg-white text-gray-900">
+  <main class="mx-auto max-w-3xl p-6 space-y-8">
+    <header class="space-y-2">
+      <h1 class="text-2xl font-bold">Tabs</h1>
+      <p class="text-sm text-gray-600">Keyboard-accessible tabs with ARIA.</p>
+    </header>
+
+    <!-- Host -->
+    <div use="TabsDemo" class="max-w-3xl"></div>
+
+    <!-- Template -->
+    <template id="tabs-demo">
+      <div class="space-y-4">
+        <!-- Tablist -->
+        <div role="tablist" aria-label="Sample tabs" class="flex gap-2 border-b border-gray-200"
+             onkeydown="onKey($event)">
+          <button type="button"
+            @each="tabs as t,i"
+            class="-mb-px rounded-t border-b-2 px-3 py-2 text-sm focus:outline-none { $root.activeIndex===i ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700' }"
+            role="tab"
+            aria-selected="{$root.activeIndex===i}"
+            aria-controls="panel-{i}"
+            id="tab-{i}"
+            tabindex="{ $root.activeIndex===i ? 0 : -1 }"
+            onclick="($root.activeIndex=i, setTimeout(()=>document.getElementById('tab-'+$root.activeIndex)?.focus(),0))"
+          >{t.label}</button>
+        </div>
+
+        <!-- Panels -->
+        <div class="mt-2">
+          <div @each="tabs as t,i"
+               @if="$root.activeIndex===i"
+               role="tabpanel"
+               id="panel-{i}"
+               aria-labelledby="tab-{i}">
+            <div class="rounded border border-gray-200 p-4 text-sm text-gray-700 bg-white">
+              {t.content}
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Logic -->
+    <script>
+      class TabsDemo {
+        static template = 'tabs-demo'
+        constructor() {
+          this.activeIndex = 0
+          this.tabs = [
+            { label: 'Overview', content: 'This is the overview panel.' },
+            { label: 'Details', content: 'Here are more details about the topic.' },
+            { label: 'Reviews', content: 'User reviews will appear here.' },
+          ]
+        }
+        activate(i) { this.activeIndex = i }
+        next() { this.activeIndex = (this.activeIndex + 1) % this.tabs.length }
+        prev() { this.activeIndex = (this.activeIndex - 1 + this.tabs.length) % this.tabs.length }
+        first() { this.activeIndex = 0 }
+        last() { this.activeIndex = this.tabs.length - 1 }
+        onKey($event) {
+          const n = this.tabs.length
+          if ($event.key === 'ArrowRight') { this.activeIndex = (this.activeIndex + 1) % n; $event.preventDefault() }
+          else if ($event.key === 'ArrowLeft') { this.activeIndex = (this.activeIndex - 1 + n) % n; $event.preventDefault() }
+          else if ($event.key === 'Home') { this.activeIndex = 0; $event.preventDefault() }
+          else if ($event.key === 'End') { this.activeIndex = n - 1; $event.preventDefault() }
+          // move focus to active tab after state update
+          setTimeout(() => document.getElementById('tab-' + this.activeIndex)?.focus(), 0)
+        }
+      }
+    </script>
+
+    <script type="module">
+      import { init } from './sparkle.js'
+      init()
+    </script>
+  </main>
+</body>
+</html>
