@@ -9,10 +9,14 @@ const exprCache = new Map<string, Function>();
 const rootStateMap = new WeakMap<Element, Scope>();
 const scheduled = new WeakSet<Element>();
 const initialized = new WeakSet<Element>();
-const listenerMap = new WeakMap<Element, { el: Element; event: string; handler: EventListener }[]>();
 const reactiveCache = new WeakMap<object, any>();
+const listenerMap = new WeakMap<Element, { el: EventTarget; event: string; handler: EventListener }[]>();
 const componentInstance = new WeakMap<Element, any>();
 const ctorCache = new Map<string, any>();
+
+// ----------------------------------------
+// Expression compilation & evaluation
+// ----------------------------------------
 
 function compile(expr: string): Function {
   let fn = exprCache.get(expr);
@@ -29,7 +33,7 @@ function compile(expr: string): Function {
 function unwrapExpr(raw: string): string {
   let s = (raw || "").trim();
   // Remove one or two layers of surrounding braces if present
-  const stripOnce = (t: string) => (t.startsWith("{") && t.endsWith("}") ? t.slice(1, -1).trim() : t);
+  const stripOnce = (t: string) => (t.startsWith("{") && t.endsWith("}")) ? t.slice(1, -1).trim() : t;
   s = stripOnce(s);
   s = stripOnce(s);
   return s;
@@ -44,6 +48,10 @@ function evalInScope(expr: string, state: Scope, $event?: Event) {
     return undefined;
   }
 }
+
+// ----------------------------------------
+// DOM utilities & normalization
+// ----------------------------------------
 
 function setBooleanProp(el: Element, prop: string, v: any) {
   try {
@@ -83,6 +91,25 @@ function normalizeStyle(v: any): string {
   }
   return String(v);
 }
+
+const BOOLEAN_ATTRS = new Set([
+  "checked","disabled","readonly","required","open","selected","hidden",
+  "autofocus","multiple","muted","playsinline","controls"
+]);
+
+function hasBraces(v: string | null): boolean {
+  return !!(v && v.includes("{"));
+}
+
+function shouldBindAttr(name: string, value: string | null): boolean {
+  if (name === "value" || name === "disabled" || name === "checked") return true;
+  if (name === "class" || name === "style") return hasBraces(value);
+  return hasBraces(value);
+}
+
+// ----------------------------------------
+// Render pass: apply attribute bindings and text interpolations
+// ----------------------------------------
 
 function scheduleRender(root: Element) {
   if (scheduled.has(root)) return;
@@ -140,7 +167,7 @@ function renderBindings(state: Scope, root: Element) {
       else b.el.setAttribute("value", String(v));
       continue;
     }
-    if (attrName === "checked" || attrName === "disabled" || attrName === "readonly" || attrName === "required" || attrName === "open" || attrName === "selected" || attrName === "hidden" || attrName === "autofocus" || attrName === "multiple" || attrName === "muted" || attrName === "playsinline" || attrName === "controls") {
+    if (BOOLEAN_ATTRS.has(attrName)) {
       const boolVal = Boolean(v);
       setBooleanProp(b.el, attrName, boolVal);
       if (boolVal) b.el.setAttribute(attrName, "");
@@ -173,6 +200,10 @@ function renderBindings(state: Scope, root: Element) {
   }
 }
 
+// ----------------------------------------
+// Reactive state
+// ----------------------------------------
+
 function makeReactive<T extends object>(obj: T, root: Element): T {
   if (obj === null || typeof obj !== "object") return obj;
   const existing = reactiveCache.get(obj as unknown as object);
@@ -200,6 +231,75 @@ function makeReactive<T extends object>(obj: T, root: Element): T {
   return proxy as T;
 }
 
+// ----------------------------------------
+// Binding discovery & event wiring
+// ----------------------------------------
+
+function collectBindingsForRoot(root: Element) {
+  // Attribute bindings
+  const abinds: AttrBinding[] = [];
+  const all = root.querySelectorAll("*");
+  all.forEach((el) => {
+    for (const { name, value } of Array.from(el.attributes)) {
+      if (shouldBindAttr(name, value)) {
+        abinds.push({ el, attr: name, expr: value || "" });
+      }
+    }
+  });
+  attrBindings.set(root, abinds);
+
+  // Text interpolations
+  const ibinds: InterpBinding[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node: Node | null = walker.nextNode();
+  while (node) {
+    const t = node as Text;
+    const parent = t.parentElement;
+    if (parent && ["SCRIPT", "STYLE", "TEMPLATE"].includes(parent.tagName)) {
+      // skip
+    } else if (t.nodeValue && /\{[^}]+\}/.test(t.nodeValue)) {
+      ibinds.push({ node: t, template: t.nodeValue });
+    }
+    node = walker.nextNode();
+  }
+  interpBindings.set(root, ibinds);
+}
+
+function wireEventHandlers(root: Element, state: Scope) {
+  const listeners: { el: Element; event: string; handler: EventListener }[] = [];
+  const all = root.querySelectorAll("*");
+  all.forEach((el) => {
+    for (const { name, value } of Array.from(el.attributes)) {
+      if (name.startsWith("on") && name.length > 2) {
+        const event = name.slice(2);
+        const needsOutside = (value || '').includes('$event.outside');
+        const target: EventTarget = needsOutside ? document : el;
+        const handler = (ev: Event) => {
+          const wrapped = new Proxy(ev as any, {
+            get(t, p) {
+              if (p === 'outside') {
+                return !(root.contains(ev.target as Node));
+              }
+              // @ts-ignore
+              return t[p];
+            }
+          });
+          evalInScope(value, state, wrapped as any);
+          scheduleRender(root);
+        };
+        target.addEventListener(event, handler as EventListener, needsOutside ? true : false);
+        listeners.push({ el: target as any, event, handler: handler as EventListener });
+        try { el.removeAttribute(name); } catch {}
+      }
+    }
+  });
+  if (listeners.length) listenerMap.set(root, listeners);
+}
+
+// ----------------------------------------
+// Scope mounting ([scope])
+// ----------------------------------------
+
 function setupScope(root: Element) {
   // Parse scope JSON if provided, else empty object
   const attr = root.getAttribute("scope");
@@ -219,78 +319,13 @@ function setupScope(root: Element) {
   const state = makeReactive(initial, root);
   rootStateMap.set(root, state);
 
-  // Collect attribute bindings (plain expression attrs only)
-  const abinds: AttrBinding[] = [];
-  const all = root.querySelectorAll("*");
-  all.forEach((el) => {
-    for (const { name, value } of Array.from(el.attributes)) {
-      // plain attributes treated as expressions for a small allowlist
-      if (name === "disabled" || name === "checked" || name === "value") {
-        abinds.push({ el, attr: name, expr: value || "" });
-      } else if (name === "class" || name === "style") {
-        // Only dynamic-bind class/style if value contains `{` (marks an expression)
-        if ((value || "").includes("{")) {
-          abinds.push({ el, attr: name, expr: value || "" });
-        }
-      } else if ((value || "").includes("{")) {
-        // Any attribute whose value contains braces becomes an expression binding (e.g., aria-*)
-        abinds.push({ el, attr: name, expr: value || "" });
-      }
-    }
-  });
-  attrBindings.set(root, abinds);
-
-  // Collect text interpolation bindings: any Text node containing {expr}
-  const ibinds: InterpBinding[] = [];
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let node: Node | null = walker.nextNode();
-  while (node) {
-    const t = node as Text;
-    const parent = t.parentElement;
-    if (
-      parent &&
-      ["SCRIPT", "STYLE", "TEMPLATE"].includes(parent.tagName)
-    ) {
-      // skip
-    } else if (t.nodeValue && /\{[^}]+\}/.test(t.nodeValue)) {
-      ibinds.push({ node: t, template: t.nodeValue });
-    }
-    node = walker.nextNode();
-  }
-  interpBindings.set(root, ibinds);
+  collectBindingsForRoot(root);
 
   // Initial render
   renderBindings(state, root);
 
-  // Events: plain DOM events only (onclick, oninput, ...)
-  const listeners: { el: Element; event: string; handler: EventListener }[] = [];
-  all.forEach((el) => {
-    for (const { name, value } of Array.from(el.attributes)) {
-      if (name.startsWith("on") && name.length > 2) {
-        const event = name.slice(2); // onclick -> click
-        const needsOutside = (value || '').includes('$event.outside');
-        const target: EventTarget = needsOutside ? document : el;
-        const handler = (ev: Event) => {
-          const wrapped = new Proxy(ev as any, {
-            get(t, p) {
-              if (p === 'outside') {
-                return !(root.contains(ev.target as Node));
-              }
-              // @ts-ignore
-              return t[p];
-            }
-          });
-          evalInScope(value, state, wrapped as any);
-          scheduleRender(root);
-        };
-        target.addEventListener(event, handler as EventListener, needsOutside ? true : false);
-        listeners.push({ el: target as any, event, handler: handler as EventListener });
-        // Remove native inline handler to avoid global-scope eval like inc is not defined
-        try { el.removeAttribute(name); } catch {}
-      }
-    }
-  });
-  if (listeners.length) listenerMap.set(root, listeners);
+  // Events: onclick/oninput/... (with $event.outside support)
+  wireEventHandlers(root, state);
 }
 
 export function init(selector: string = "[scope]") {
@@ -391,68 +426,12 @@ export function init(selector: string = "[scope]") {
     rootStateMap.set(host, reactive);
     componentInstance.set(host, instance);
 
-    // Collect bindings inside host
-    const abinds: AttrBinding[] = [];
-    const all = host.querySelectorAll('*');
-    all.forEach((el) => {
-      for (const { name: aname, value } of Array.from(el.attributes)) {
-        if (aname === 'disabled' || aname === 'checked' || aname === 'value') {
-          abinds.push({ el, attr: aname, expr: value || '' });
-        } else if (aname === 'class' || aname === 'style') {
-          if ((value || '').includes('{')) {
-            abinds.push({ el, attr: aname, expr: value || '' });
-          }
-        } else if ((value || '').includes('{')) {
-          abinds.push({ el, attr: aname, expr: value || '' });
-        }
-      }
-    });
-    attrBindings.set(host, abinds);
-
-    const ibinds: InterpBinding[] = [];
-    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
-    let node: Node | null = walker.nextNode();
-    while (node) {
-      const t = node as Text;
-      const parent = t.parentElement;
-      if (parent && ['SCRIPT','STYLE','TEMPLATE'].includes(parent.tagName)) {
-        // skip
-      } else if (t.nodeValue && /\{[^}]+\}/.test(t.nodeValue)) {
-        ibinds.push({ node: t, template: t.nodeValue });
-      }
-      node = walker.nextNode();
-    }
-    interpBindings.set(host, ibinds);
+    // Collect bindings & interpolations inside host
+    collectBindingsForRoot(host);
 
     renderBindings(reactive, host);
-    const listeners: { el: Element; event: string; handler: EventListener }[] = [];
-    all.forEach((el) => {
-      for (const { name: aname, value } of Array.from(el.attributes)) {
-        if (aname.startsWith('on') && aname.length > 2) {
-          const event = aname.slice(2);
-          const needsOutside = (value || '').includes('$event.outside');
-          const target: EventTarget = needsOutside ? document : el;
-          const handler = (ev: Event) => {
-            const wrapped = new Proxy(ev as any, {
-              get(t, p) {
-                if (p === 'outside') {
-                  return !(host.contains(ev.target as Node));
-                }
-                // @ts-ignore
-                return t[p];
-              }
-            });
-            evalInScope(value, reactive, wrapped as any);
-            scheduleRender(host);
-          };
-          target.addEventListener(event, handler as EventListener, needsOutside ? true : false);
-          listeners.push({ el: target as any, event, handler: handler as EventListener });
-          // prevent native inline handler from executing in global scope
-          try { el.removeAttribute(aname); } catch {}
-        }
-      }
-    });
-    if (listeners.length) listenerMap.set(host, listeners);
+    // Events
+    wireEventHandlers(host, reactive);
     try { instance?.onMount?.(host) } catch {}
   }
 }
