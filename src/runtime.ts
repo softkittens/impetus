@@ -379,12 +379,14 @@ function wireEventHandlers(root: Element, state: Scope) {
       if (name.startsWith("on") && name.length > 2) {
         const event = name.slice(2);
         const needsOutside = (value || '').includes('$event.outside');
-        const target: EventTarget = needsOutside ? document : el;
+        const isGlobalKey = event === 'keydown';
+        const target: EventTarget = (needsOutside || isGlobalKey) ? document : el;
         const handler = (ev: Event) => {
           const wrapped = new Proxy(ev as any, {
             get(t, p) {
               if (p === 'outside') {
-                return !(root.contains(ev.target as Node));
+                // Outside relative to the element that declared the handler
+                return !(el.contains(ev.target as Node));
               }
               // @ts-ignore
               return t[p];
@@ -393,7 +395,9 @@ function wireEventHandlers(root: Element, state: Scope) {
           evalInScope(value, state, wrapped as any);
           scheduleRender(root);
         };
-        target.addEventListener(event, handler as EventListener, needsOutside ? true : false);
+        // Use capture only for outside click to ensure it fires before element handlers
+        const useCapture = needsOutside ? true : false;
+        target.addEventListener(event, handler as EventListener, useCapture);
         listeners.push({ el: target as any, event, handler: handler as EventListener });
         try { el.removeAttribute(name); } catch {}
       }

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sparkle: toggle</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="min-h-dvh bg-white text-gray-900">
+  <main class="mx-auto max-w-3xl p-6 space-y-8">
+    <header class="space-y-2">
+      <h1 class="text-2xl font-bold">Toggle</h1>
+      <p class="text-sm text-gray-600">iOS-style switch with hidden input and accessibility.</p>
+    </header>
+
+    <!-- Host -->
+    <div use="Toggle" class="max-w-sm"></div>
+
+    <!-- Template -->
+    <template id="toggle">
+      <div class="space-y-4">
+        <!-- Hidden input mirrors state for form submission -->
+        <input type="hidden" name="{name}" value="{checked ? onValue : offValue}">
+
+        <!-- Switch -->
+        <button
+          class="group relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer transition-colors duration-200 ease-out motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-offset-2 { checked ? 'bg-gradient-to-b from-green-500 to-green-600 shadow-inner' : 'bg-gradient-to-b from-gray-300 to-gray-400 shadow-inner' }"
+          role="switch"
+          aria-checked="{checked}"
+          onclick="toggle()"
+          onkeydown="(($event.key==='Enter'||$event.key===' ')&&(toggle()))"
+          tabindex="0"
+        >
+          <span class="sr-only">Toggle</span>
+          <span class="inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-200 ease-out motion-reduce:transition-none { checked ? 'translate-x-5' : 'translate-x-0' } group-active:scale-95"></span>
+        </button>
+
+        <div class="text-sm text-gray-700">
+          State: <span class="font-medium">{checked ? 'On' : 'Off'}</span>
+        </div>
+      </div>
+    </template>
+
+    <!-- Logic -->
+    <script>
+      class Toggle {
+        static template = 'toggle'
+        constructor(props = {}) {
+          this.checked = props.checked ?? false
+          this.name = props.name ?? 'toggle'
+          this.onValue = props.onValue ?? '1'
+          this.offValue = props.offValue ?? '0'
+        }
+        toggle() { this.checked = !this.checked }
+      }
+    </script>
+
+    <script type="module">
+      import { init } from './sparkle.js'
+      init()
+    </script>
+  </main>
+</body>
+</html>
