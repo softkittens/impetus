@@ -21,10 +21,16 @@ const eachChildren = new WeakMap<Element, Element[]>();
 const eachLastItems = new WeakMap<Element, any[]>();
 const componentInstance = new WeakMap<Element, any>();
 const ctorCache = new Map<string, any>();
+const computedCache = new WeakMap<Element, Map<string, { value: any; deps: Set<string> }>>();
 
-// ----------------------------------------
-// Expression compilation & evaluation
-// ----------------------------------------
+/*
+|--------------------------------------------------------------------------
+| Expression Compilation & Evaluation
+|--------------------------------------------------------------------------
+| Compile and evaluate JavaScript expressions in component scope using
+| the "with" statement. Expressions are cached for performance.
+|
+*/
 
 function compile(expr: string): Function {
   let fn = exprCache.get(expr);
@@ -55,6 +61,19 @@ function evalInScope(expr: string, state: Scope, $event?: Event) {
     console.warn("sparkle: eval error", expr, e);
     return undefined;
   }
+}
+
+function evalComputed(expr: string, state: Scope, root: Element): any {
+  let cache = computedCache.get(root);
+  if (!cache) {
+    cache = new Map();
+    computedCache.set(root, cache);
+  }
+  const cached = cache.get(expr);
+  if (cached !== undefined) return cached.value;
+  const value = evalInScope(expr, state);
+  cache.set(expr, { value, deps: new Set() });
+  return value;
 }
 
 function assignInScope(path: string, state: Scope, value: any) {
@@ -109,9 +128,14 @@ function resolveCtor(name: string): any {
   return undefined;
 }
 
-// ----------------------------------------
-// DOM utilities & normalization
-// ----------------------------------------
+/*
+|--------------------------------------------------------------------------
+| DOM Utilities & Normalization
+|--------------------------------------------------------------------------
+| Helper functions for setting properties, normalizing class/style values,
+| and converting between different attribute formats.
+|
+*/
 
 function setBooleanProp(el: Element, prop: string, v: any) {
   try {
@@ -183,19 +207,89 @@ function shouldBindAttr(name: string, value: string | null): boolean {
   return hasBraces(value);
 }
 
-// ----------------------------------------
-// Render pass: apply attribute bindings and text interpolations
-// ----------------------------------------
+/*
+|--------------------------------------------------------------------------
+| Directive Handlers
+|--------------------------------------------------------------------------
+| Handle conditional rendering (@if/@else), visibility (@show),
+| and list rendering (@each) directives.
+|
+*/
 
 function scheduleRender(root: Element) {
   if (scheduled.has(root)) return;
   scheduled.add(root);
+  // Invalidate computed cache on state change
+  computedCache.delete(root);
   queueMicrotask(() => {
     scheduled.delete(root);
     const state = rootStateMap.get(root);
     if (state) renderBindings(state, root);
   });
 }
+
+// Attribute binding handlers for cleaner renderBindings
+const attrHandlers: Record<string, (el: Element, expr: string, raw: string, state: Scope, root: Element) => boolean> = {
+  // Two-way model binding
+  value(el, expr, raw, state) {
+    if (!el.hasAttribute('data-model')) return false;
+    const tag = el.tagName;
+    if (tag === 'INPUT') {
+      const typ = (el as HTMLInputElement).type;
+      if (typ === 'checkbox') {
+        const bv = Boolean(evalInScope(expr, state));
+        setBooleanProp(el, 'checked', bv);
+        if (bv) el.setAttribute('checked', ''); else el.removeAttribute('checked');
+        return true;
+      }
+      if (typ === 'radio') {
+        const modelVal = evalInScope(expr, state);
+        const elVal = (el as HTMLInputElement).value;
+        const isChecked = String(modelVal) === String(elVal);
+        setBooleanProp(el, 'checked', isChecked);
+        if (isChecked) el.setAttribute('checked', ''); else el.removeAttribute('checked');
+        return true;
+      }
+    }
+    const v = evalInScope(expr, state);
+    setValueProp(el, v);
+    if (v == null || v === false) el.removeAttribute('value');
+    else el.setAttribute('value', String(v));
+    return true;
+  },
+  // Class binding with normalization
+  class(el, expr, raw, state) {
+    let output = "";
+    if (raw.includes("{")) {
+      output = raw.replace(/\{([^}]+)\}/g, (_, ex) => {
+        const val = evalInScope(unwrapExpr(String(ex)), state);
+        return normalizeClass(val);
+      });
+    } else {
+      output = raw;
+    }
+    output = output.trim().replace(/\s+/g, " ");
+    if (output) el.setAttribute("class", output);
+    else el.removeAttribute("class");
+    return true;
+  },
+  // Style binding with normalization
+  style(el, expr, raw, state) {
+    let st = "";
+    if (raw.includes("{")) {
+      st = raw.replace(/\{([^}]+)\}/g, (_, ex) => {
+        const val = evalInScope(unwrapExpr(String(ex)), state);
+        return normalizeStyle(val);
+      });
+    } else {
+      st = raw;
+    }
+    st = st.trim().replace(/;+\s*$/g, "");
+    if (st) el.setAttribute("style", st);
+    else el.removeAttribute("style");
+    return true;
+  },
+};
 
 // Directive handlers
 function handleIfDirective(el: Element, expr: string, state: Scope): void {
@@ -347,34 +441,8 @@ function renderBindings(state: Scope, root: Element) {
     const raw = b.expr || "";
     const expr = unwrapExpr(raw);
     const attrName = b.attr;
-    // s-model (two-way) is represented as data-model marker and an attr 'value'
-    if (attrName === 'value' && (b.el as Element).hasAttribute('data-model')) {
-      const tag = b.el.tagName;
-      if (tag === 'INPUT') {
-        const typ = (b.el as HTMLInputElement).type;
-        if (typ === 'checkbox') {
-          const bv = Boolean(evalInScope(expr, state));
-          setBooleanProp(b.el, 'checked', bv);
-          if (bv) (b.el as Element).setAttribute('checked', ''); else (b.el as Element).removeAttribute('checked');
-          continue;
-        }
-        if (typ === 'radio') {
-          const modelVal = evalInScope(expr, state);
-          const elVal = (b.el as HTMLInputElement).value;
-          const isChecked = String(modelVal) === String(elVal);
-          setBooleanProp(b.el, 'checked', isChecked);
-          if (isChecked) (b.el as Element).setAttribute('checked', ''); else (b.el as Element).removeAttribute('checked');
-          continue;
-        }
-      }
-      // default path: set value prop/attr
-      const v = evalInScope(expr, state);
-      setValueProp(b.el, v);
-      if (v == null || v === false) (b.el as Element).removeAttribute('value');
-      else (b.el as Element).setAttribute('value', String(v));
-      continue;
-    }
-    // Conditionals
+    
+    // Directives
     if (DIRECTIVES.IF.has(attrName)) {
       handleIfDirective(b.el, expr, state);
       continue;
@@ -390,39 +458,13 @@ function renderBindings(state: Scope, root: Element) {
       handleEachDirective(b.el, expr, state, root);
       continue;
     }
-    // Special cases
-    if (attrName === "class") {
-      let output = "";
-      if (raw.includes("{")) {
-        output = raw.replace(/\{([^}]+)\}/g, (_, ex) => {
-          const val = evalInScope(unwrapExpr(String(ex)), state);
-          return normalizeClass(val);
-        });
-      } else {
-        // No dynamic parts: leave as-is (but normalize if it's an expression-only binding)
-        output = raw;
-      }
-      output = output.trim().replace(/\s+/g, " ");
-      if (output) b.el.setAttribute("class", output);
-      else b.el.removeAttribute("class");
+    
+    // Use consolidated handlers for special attributes
+    const handler = attrHandlers[attrName];
+    if (handler && handler(b.el, expr, raw, state, root)) {
       continue;
     }
-    if (attrName === "style") {
-      let st = "";
-      if (raw.includes("{")) {
-        // Replace each {expr} with normalized style string of its value (object or string)
-        st = raw.replace(/\{([^}]+)\}/g, (_, ex) => {
-          const val = evalInScope(unwrapExpr(String(ex)), state);
-          return normalizeStyle(val);
-        });
-      } else {
-        st = raw;
-      }
-      st = st.trim().replace(/;+\s*$/g, "");
-      if (st) b.el.setAttribute("style", st);
-      else b.el.removeAttribute("style");
-      continue;
-    }
+    
     // Handle value property binding explicitly
     if (attrName === "value") {
       const v = evalInScope(expr, state);
@@ -479,9 +521,14 @@ function renderBindings(state: Scope, root: Element) {
   }
 }
 
-// ----------------------------------------
-// Reactive state
-// ----------------------------------------
+/*
+|--------------------------------------------------------------------------
+| Reactive State Management
+|--------------------------------------------------------------------------
+| Create reactive proxies that automatically schedule re-renders when
+| properties are modified. Supports nested reactivity and multi-root tracking.
+|
+*/
 
 function makeReactive<T extends object>(obj: T, root: Element): T {
   if (obj === null || typeof obj !== "object") return obj;
@@ -534,9 +581,90 @@ function makeReactive<T extends object>(obj: T, root: Element): T {
   return proxy as T;
 }
 
-// ----------------------------------------
-// Binding discovery & event wiring
-// ----------------------------------------
+/*
+|--------------------------------------------------------------------------
+| Component Mounting & Props Parsing
+|--------------------------------------------------------------------------
+| Parse component props from attributes, resolve templates, and mount
+| component instances with proper lifecycle hooks.
+|
+*/
+
+function parseProps(host: Element): Record<string, any> {
+  const toCamel = (s: string) => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+  const coerce = (v: string): any => {
+    if (v === "true") return true;
+    if (v === "false") return false;
+    if (v === "null") return null;
+    if (v === "undefined") return undefined;
+    if (!isNaN(Number(v)) && v.trim() !== "") return Number(v);
+    return v;
+  };
+  let props: Record<string, any> = {};
+  const raw = host.getAttribute("props");
+  if (raw) {
+    try { props = JSON.parse(raw); } catch { console.warn("sparkle: invalid props JSON", raw); }
+  }
+  for (const { name, value } of Array.from(host.attributes)) {
+    if (name === "use" || name === "template" || name === "props") continue;
+    const key = name.startsWith("data-") || name.startsWith("aria-") ? name : toCamel(name);
+    props[key] = coerce(value);
+  }
+  return props;
+}
+
+function mountComponent(host: Element, className: string, inherit: boolean): void {
+  if (initialized.has(host)) return;
+  const ctor = resolveCtor(className);
+  if (typeof ctor !== 'function') {
+    console.warn('sparkle: constructor not found for', className);
+    return;
+  }
+  const props = parseProps(host);
+  let instance: any;
+  if (inherit) {
+    let par: Element | null = host.parentElement;
+    let inherited: Scope | undefined;
+    while (par && !inherited) {
+      const s = rootStateMap.get(par as Element);
+      if (s) inherited = s;
+      par = par.parentElement;
+    }
+    if (!inherited) {
+      console.warn('sparkle: inherit requested but no parent state found for', className);
+      try { instance = new ctor(props); } catch { instance = {}; }
+    } else {
+      instance = inherited;
+    }
+  } else {
+    try { instance = new ctor(props); } catch (e) {
+      console.warn('sparkle: error constructing', className, e);
+      instance = {};
+    }
+  }
+  const hostTpl = host.getAttribute('template');
+  const staticTpl = (ctor as any).template;
+  const instTpl = instance?.template;
+  const tplId = hostTpl || staticTpl || instTpl;
+  if (tplId) {
+    const tplEl = document.getElementById(String(tplId)) as HTMLTemplateElement | null;
+    if (tplEl && tplEl.tagName === 'TEMPLATE') {
+      host.innerHTML = '';
+      host.appendChild(tplEl.content.cloneNode(true));
+    } else {
+      console.warn('sparkle: template id not found', tplId);
+    }
+  }
+  initialized.add(host);
+  if (!inherit) { try { (instance as any).$el = host; } catch {} }
+  const reactive = makeReactive(instance, host);
+  rootStateMap.set(host, reactive);
+  if (!inherit) componentInstance.set(host, instance);
+  collectBindingsForRoot(host);
+  renderBindings(reactive, host);
+  wireEventHandlers(host, reactive);
+  if (!inherit) { try { instance?.onMount?.call(reactive, host); } catch {} }
+}
 
 function collectBindingsForRoot(root: Element) {
   // Inline template anchors: <div template="id"></div>
@@ -562,39 +690,10 @@ function collectBindingsForRoot(root: Element) {
   // Mount nested component hosts inside this root (if any)
   const nestedHosts = Array.from(root.querySelectorAll('[use]:not(template):not(script)')) as Element[];
   for (const host of nestedHosts) {
-    if (initialized.has(host)) continue;
     const className = (host.getAttribute('use') || '').trim();
     if (!className) continue;
-    // Resolve ctor
-    const ctor: any = resolveCtor(className);
-    if (typeof ctor !== 'function') continue;
     const inherit = host.hasAttribute('inherit');
-    let instance: any;
-    if (inherit) {
-      let par: Element | null = host.parentElement; let inherited: Scope | undefined;
-      while (par && !inherited) { const s = rootStateMap.get(par as Element); if (s) inherited = s; par = par.parentElement; }
-      instance = inherited ?? {};
-    } else {
-      try { instance = new ctor({}); } catch { instance = {}; }
-    }
-    const hostTpl = host.getAttribute('template');
-    const staticTpl = (ctor as any).template; const instTpl = (instance as any)?.template;
-    const tplId = hostTpl || staticTpl || instTpl;
-    if (tplId) {
-      const el = document.getElementById(String(tplId)) as HTMLTemplateElement | null;
-      if (el && el.tagName === 'TEMPLATE') { host.innerHTML=''; host.appendChild(el.content.cloneNode(true)); }
-    }
-    initialized.add(host);
-    if (!inherit) { try { (instance as any).$el = host; } catch {} }
-    const reactive = makeReactive(instance, host);
-    rootStateMap.set(host, reactive);
-    if (!inherit) componentInstance.set(host, instance);
-    // Each nested host will collect its own bindings/events later when init/render runs for it
-    // but we call collect/render here to make it eager and ready
-    collectBindingsForRoot(host);
-    renderBindings(reactive, host);
-    wireEventHandlers(host, reactive);
-    if (!inherit) { try { (instance as any)?.onMount?.call(reactive, host) } catch {} }
+    mountComponent(host, className, inherit);
   }
 
   // Attribute bindings
@@ -739,9 +838,14 @@ function wireEventHandlers(root: Element, state: Scope) {
   if (listeners.length) listenerMap.set(root, listeners);
 }
 
-// ----------------------------------------
-// Scope mounting ([scope])
-// ----------------------------------------
+/*
+|--------------------------------------------------------------------------
+| Initialization & Cleanup
+|--------------------------------------------------------------------------
+| Initialize components and scoped elements, wire up reactivity,
+| and provide cleanup for unmounting.
+|
+*/
 
 function setupScope(root: Element) {
   // Parse scope JSON if provided, else empty object
@@ -809,66 +913,8 @@ export function init(selector: string = "[scope]") {
   for (const host of hosts) {
     const className = (host.getAttribute('use') || '').trim();
     if (!className) continue;
-    const ctor = resolveCtor(className);
-    if (typeof ctor !== 'function') {
-      console.warn('sparkle: constructor not found on global scope for', className);
-      continue;
-    }
     const inherit = host.hasAttribute('inherit');
-    const props = parseProps(host);
-    let instance: any;
-    if (inherit) {
-      // find nearest parent root with a state
-      let par: Element | null = host.parentElement;
-      let inherited: Scope | undefined;
-      while (par && !inherited) {
-        const s = rootStateMap.get(par as Element);
-        if (s) inherited = s;
-        par = par.parentElement;
-      }
-      if (!inherited) {
-        console.warn('sparkle: inherit requested but no parent state found for', className);
-        try { instance = new ctor(props); } catch { instance = {}; }
-      } else {
-        instance = inherited;
-      }
-    } else {
-      try { instance = new ctor(props); } catch (e) {
-        console.warn('sparkle: error constructing', className, e);
-        instance = {};
-      }
-    }
-
-    // Resolve template id: host attr -> static -> instance
-    const hostTpl = host.getAttribute('template');
-    const staticTpl = (ctor as any).template;
-    const instTpl = instance?.template;
-    const tplId = hostTpl || staticTpl || instTpl;
-    if (tplId) {
-      const tplEl = document.getElementById(String(tplId)) as HTMLTemplateElement | null;
-      if (tplEl && tplEl.tagName === 'TEMPLATE') {
-        host.innerHTML = '';
-        host.appendChild(tplEl.content.cloneNode(true));
-      } else {
-        console.warn('sparkle: template id not found', tplId);
-      }
-    }
-
-    if (initialized.has(host)) continue;
-    initialized.add(host);
-    // Expose host to instance only when not inheriting (avoid clobbering parent's $el)
-    if (!inherit) { try { (instance as any).$el = host; } catch {} }
-    const reactive = makeReactive(instance, host);
-    rootStateMap.set(host, reactive);
-    if (!inherit) componentInstance.set(host, instance);
-
-    // Collect bindings & interpolations inside host
-    collectBindingsForRoot(host);
-
-    renderBindings(reactive, host);
-    // Events
-    wireEventHandlers(host, reactive);
-    if (!inherit) { try { instance?.onMount?.call(reactive, host) } catch {} }
+    mountComponent(host, className, inherit);
   }
 }
 

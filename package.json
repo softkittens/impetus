@@ -7,7 +7,7 @@
     "dev": "bun --hot index.ts",
     "start": "bun index.ts",
     "build": "bun build index.ts --outdir dist --target bun",
-    "build:browser": "bun build src/index.ts --outfile app/sparkle.js --target browser --format esm",
+    "build:browser": "bun build src/index.ts --outfile app/sparkle.js --target browser --format esm --minify",
     "build:watch": "bun build src/index.ts --outfile app/sparkle.js --target browser --format esm --watch",
     "serve": "bun dev-server.ts",
     "test": "bun test",
