@@ -15,6 +15,10 @@ const reactiveProxies = new WeakSet<object>();
 const proxyRoots = new WeakMap<object, Set<Element>>();
 const listenerMap = new WeakMap<Element, { el: EventTarget; event: string; handler: EventListener }[]>();
 const ifPlaceholders = new WeakMap<Element, Comment>();
+const eachPlaceholders = new WeakMap<Element, Comment>();
+const eachTemplates = new WeakMap<Element, Element>();
+const eachChildren = new WeakMap<Element, Element[]>();
+const eachLastItems = new WeakMap<Element, any[]>();
 const componentInstance = new WeakMap<Element, any>();
 const ctorCache = new Map<string, any>();
 
@@ -144,7 +148,7 @@ function hasBraces(v: string | null): boolean {
 }
 
 function shouldBindAttr(name: string, value: string | null): boolean {
-  if (name === "s-if" || name === "s-show" || name === "@if" || name === "@show" || name === 's-else' || name === '@else') return true;
+  if (name === "s-if" || name === "s-show" || name === "@if" || name === "@show" || name === 's-else' || name === '@else' || name === 's-each' || name === '@each') return true;
   if (name === "value" || name === "disabled" || name === "checked") return true;
   if (name === "class" || name === "style") return hasBraces(value);
   return hasBraces(value);
@@ -251,6 +255,59 @@ function renderBindings(state: Scope, root: Element) {
     }
     if (attrName === 's-else' || attrName === '@else') {
       // handled by preceding s-if/@if block
+      continue;
+    }
+    if (attrName === 's-each' || attrName === '@each') {
+      // Parse pattern: "itemsExpr" or "itemsExpr as item,i"
+      const m = expr.match(/^(.*?)(?:\s+as\s+([a-zA-Z_$][\w$]*)(?:\s*,\s*([a-zA-Z_$][\w$]*))?)?$/);
+      const listExpr = (m?.[1] || expr).trim();
+      const itemKey = (m?.[2] || 'item').trim();
+      const idxKey = (m?.[3] || 'i').trim();
+      let items = evalInScope(listExpr, state) as any[];
+      if (!Array.isArray(items)) items = [];
+      // Skip re-render if items haven't changed (shallow check)
+      const last = eachLastItems.get(b.el);
+      if (last && last.length === items.length && last.every((v, i) => v === items[i])) {
+        continue;
+      }
+      eachLastItems.set(b.el, items.slice());
+      let ph = eachPlaceholders.get(b.el);
+      if (!ph) {
+        ph = document.createComment('s-each');
+        try { b.el.parentNode?.insertBefore(ph, b.el); } catch {}
+        eachPlaceholders.set(b.el, ph);
+        // store template (original element) and remove it from DOM
+        const tpl = b.el as Element;
+        eachTemplates.set(b.el, tpl.cloneNode(true) as Element);
+        try { tpl.parentNode?.removeChild(tpl); } catch {}
+      }
+      const parent = ph.parentNode as Node | null;
+      if (!parent) continue;
+      // cleanup previous children
+      const prev = eachChildren.get(b.el) || [];
+      for (const n of prev) {
+        try { destroy(n); } catch {}
+        try { n.parentNode?.removeChild(n); } catch {}
+      }
+      const created: Element[] = [];
+      const tpl = eachTemplates.get(b.el) as Element;
+      for (let i = 0; i < items.length; i++) {
+        const child = tpl.cloneNode(true) as Element;
+        try { child.removeAttribute('s-each'); child.removeAttribute('@each'); } catch {}
+        // mount after placeholder in order
+        try { parent.insertBefore(child, ph.nextSibling); } catch {}
+        // extended state: prototype chain to parent state
+        const ext: any = Object.create(state);
+        ext[itemKey] = items[i];
+        ext[idxKey] = i;
+        const reactive = makeReactive(ext, child);
+        rootStateMap.set(child, reactive);
+        collectBindingsForRoot(child);
+        renderBindings(reactive, child);
+        wireEventHandlers(child, reactive);
+        created.push(child);
+      }
+      eachChildren.set(b.el, created);
       continue;
     }
     // Special cases
@@ -476,8 +533,17 @@ function collectBindingsForRoot(root: Element) {
     const parent = t.parentElement;
     if (parent && ["SCRIPT", "STYLE", "TEMPLATE"].includes(parent.tagName)) {
       // skip
-    } else if (t.nodeValue && /\{[^}]+\}/.test(t.nodeValue)) {
-      ibinds.push({ node: t, template: t.nodeValue });
+    } else {
+      // skip any text nodes that live under an @each/s-each template holder
+      let cur: Element | null = parent;
+      let insideEach = false;
+      while (cur) {
+        if (cur.hasAttribute && (cur.hasAttribute('s-each') || cur.hasAttribute('@each'))) { insideEach = true; break; }
+        cur = cur.parentElement;
+      }
+      if (!insideEach && t.nodeValue && /\{[^}]+\}/.test(t.nodeValue)) {
+        ibinds.push({ node: t, template: t.nodeValue });
+      }
     }
     node = walker.nextNode();
   }

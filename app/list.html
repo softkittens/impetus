@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sparkle: list + search</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="min-h-dvh bg-white text-gray-900">
+  <main class="mx-auto max-w-3xl p-6 space-y-8">
+    <header class="space-y-2">
+      <h1 class="text-2xl font-bold">List + Search</h1>
+      <p class="text-sm text-gray-600">Filter a list using two-way bound input and conditional rendering.</p>
+    </header>
+
+    <!-- Host -->
+    <div use="ListDemo"></div>
+
+    <!-- Template -->
+    <template id="list-demo">
+      <div class="space-y-4">
+        <div>
+          <label for="q" class="block text-sm font-medium">Search</label>
+          <input id="q" type="text"
+                 class="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                 placeholder="Type to filter..."
+                 :value="query">
+        </div>
+
+        <!-- Empty state vs results using computed filteredItems and @each -->
+        <div @if="filteredItems.length" class="rounded border border-gray-200">
+          <ul class="divide-y divide-gray-100">
+            <li class="p-3" @each="filteredItems as item,i">{item}</li>
+          </ul>
+        </div>
+        <div @else class="text-sm text-gray-600">No results found.</div>
+      </div>
+    </template>
+
+    <!-- Logic -->
+    <script>
+      class ListDemo {
+        static template = 'list-demo'
+        constructor() {
+          this.query = ''
+          this.items = ['Apricot','Banana','Cherry','Date','Elderberry']
+        }
+        get filteredItems() {
+          const q = (this.query || '').toLowerCase()
+          return this.items.filter(it => it.toLowerCase().includes(q))
+        }
+      }
+    </script>
+
+    <script type="module">
+      import { init } from './sparkle.js'
+      init()
+    </script>
+  </main>
+</body>
+</html>
