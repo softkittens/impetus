@@ -30,7 +30,7 @@
         <!-- Empty state vs results using computed filteredItems and @each -->
         <div @if="filteredItems.length" class="rounded border border-gray-200">
           <ul class="divide-y divide-gray-100">
-            <li class="p-3" @each="filteredItems as item,i">{item}</li>
+            <li class="p-3" @each="filteredItems as item,i" key="item">{item}</li>
           </ul>
         </div>
         <div @else class="text-sm text-gray-600">No results found.</div>

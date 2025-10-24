@@ -188,7 +188,8 @@ const DIRECTIVES = {
   IF: new Set(['s-if', '@if']),
   SHOW: new Set(['s-show', '@show']),
   ELSE: new Set(['s-else', '@else']),
-  EACH: new Set(['s-each', '@each'])
+  EACH: new Set(['s-each', '@each']),
+  TRANSITION: new Set(['s-transition', '@transition'])
 };
 
 function hasBraces(v: string | null): boolean {
@@ -197,7 +198,8 @@ function hasBraces(v: string | null): boolean {
 
 function isDirective(name: string): boolean {
   return DIRECTIVES.IF.has(name) || DIRECTIVES.SHOW.has(name) || 
-         DIRECTIVES.ELSE.has(name) || DIRECTIVES.EACH.has(name);
+         DIRECTIVES.ELSE.has(name) || DIRECTIVES.EACH.has(name) ||
+         DIRECTIVES.TRANSITION.has(name);
 }
 
 function shouldBindAttr(name: string, value: string | null): boolean {
@@ -351,6 +353,12 @@ function findElseSibling(el: Element): Element | null {
 
 function handleShowDirective(el: Element, expr: string, state: Scope): void {
   const visible = Boolean(evalInScope(expr, state));
+  const hasTransition = el.hasAttribute('s-transition') || el.hasAttribute('@transition');
+  if (hasTransition) {
+    const spec = el.getAttribute('s-transition') || el.getAttribute('@transition') || 'fade';
+    applyTransition(el as HTMLElement, spec || 'fade', visible);
+    return;
+  }
   if (visible) {
     el.removeAttribute('hidden');
     el.removeAttribute('aria-hidden');
@@ -410,13 +418,26 @@ function handleEachDirective(el: Element, expr: string, state: Scope, root: Elem
   let anchor: Node = placeholder;
   
   for (let i = 0; i < items.length; i++) {
-    const clone = template.cloneNode(true) as Element;
+    let clone: Element | null = null;
+    let keyVal: any = undefined;
+    const keyExpr = el.getAttribute('key');
+    if (keyExpr) {
+      keyVal = evalInScope(keyExpr, { ...state, [itemKey]: items[i], [idxKey]: i });
+      const prev = (eachChildren.get(el) || []).find(ch => (ch as any)._skey === keyVal);
+      if (prev) {
+        clone = prev;
+        try { parent.insertBefore(clone, anchor.nextSibling); anchor = clone; } catch {}
+      }
+    }
+    if (!clone) {
+      clone = template.cloneNode(true) as Element;
+      try { parent.insertBefore(clone, anchor.nextSibling); anchor = clone; } catch {}
+    }
+    if (keyExpr) { try { (clone as any)._skey = keyVal; } catch {} }
     try { 
       clone.removeAttribute('s-each');
       clone.removeAttribute('@each');
     } catch {}
-    
-    try { parent.insertBefore(clone, anchor.nextSibling); anchor = clone; } catch {}
     
     // Create extended state with item and index
     const extendedState: any = Object.create(state);
@@ -456,6 +477,10 @@ function renderBindings(state: Scope, root: Element) {
     }
     if (DIRECTIVES.EACH.has(attrName)) {
       handleEachDirective(b.el, expr, state, root);
+      continue;
+    }
+    if (DIRECTIVES.TRANSITION.has(attrName)) {
+      // no-op here; consumed by @show/@if handlers
       continue;
     }
     
@@ -657,6 +682,8 @@ function mountComponent(host: Element, className: string, inherit: boolean): voi
   }
   initialized.add(host);
   if (!inherit) { try { (instance as any).$el = host; } catch {} }
+  // Ensure components see the global shared store in expressions via with(state)
+  try { (instance as any).$store = makeReactive((globalThis as any).__sparkleStore || ((globalThis as any).__sparkleStore = {}), host); } catch {}
   const reactive = makeReactive(instance, host);
   rootStateMap.set(host, reactive);
   if (!inherit) componentInstance.set(host, instance);
@@ -807,11 +834,15 @@ function wireEventHandlers(root: Element, state: Scope) {
     }
     for (const { name, value } of Array.from(el.attributes)) {
       if (name.startsWith("on") && name.length > 2) {
-        const event = name.slice(2);
+        const parts = name.slice(2).split('.');
+        const event = parts[0] as string;
+        const mods = new Set(parts.slice(1)); // prevent, stop, once
         const needsOutside = (value || '').includes('$event.outside');
         const isGlobalKey = event === 'keydown';
         const target: EventTarget = (needsOutside || isGlobalKey) ? document : el;
         const handler = (ev: Event) => {
+          if (mods.has('prevent')) { try { ev.preventDefault(); } catch {} }
+          if (mods.has('stop')) { try { ev.stopPropagation(); } catch {} }
           const wrapped = new Proxy(ev as any, {
             get(t, p) {
               if (p === 'outside') {
@@ -828,8 +859,13 @@ function wireEventHandlers(root: Element, state: Scope) {
         };
         // Use capture only for outside click to ensure it fires before element handlers
         const useCapture = needsOutside ? true : false;
-        target.addEventListener(event, handler as EventListener, useCapture);
+        let opts: boolean | AddEventListenerOptions | undefined;
+        if (mods.has('once') && useCapture) opts = { capture: true, once: true };
+        else if (mods.has('once')) opts = { once: true };
+        else if (useCapture) opts = true; // boolean capture shorthand
+        target.addEventListener(event, handler as EventListener, opts);
         listeners.push({ el: target as any, event, handler: handler as EventListener });
+        // no manual once listener needed; AddEventListenerOptions.once handles it
         // remove inline to avoid global-scope eval
         try { el.removeAttribute(name); } catch {}
       }
@@ -865,6 +901,7 @@ function setupScope(root: Element) {
 
   const state = makeReactive(initial, root);
   rootStateMap.set(root, state);
+  try { (state as any).$store = makeReactive((globalThis as any).__sparkleStore || ((globalThis as any).__sparkleStore = {}), root); } catch {}
 
   collectBindingsForRoot(root);
 
@@ -932,4 +969,30 @@ export function destroy(root: Element) {
   scheduled.delete(root);
   initialized.delete(root);
   try { (componentInstance.get(root) as any)?.onDestroy?.() } catch {}
+}
+
+// Simple transitions (fade[:durationMs]) applied by @show/@transition
+function applyTransition(el: HTMLElement, spec: string, show: boolean) {
+  const [type, durStr] = String(spec || 'fade').split(':');
+  const dur = Math.max(0, Number(durStr || 150)) || 150;
+  if (type !== 'fade') {
+    if (show) {
+      el.removeAttribute('hidden'); el.removeAttribute('aria-hidden'); el.style.removeProperty('display');
+    } else {
+      el.setAttribute('hidden',''); el.setAttribute('aria-hidden','true'); el.style.display = 'none';
+    }
+    return;
+  }
+  el.style.transition = `opacity ${dur}ms ease`;
+  if (show) {
+    el.removeAttribute('hidden'); el.removeAttribute('aria-hidden'); el.style.removeProperty('display');
+    el.style.opacity = '0';
+    requestAnimationFrame(() => { el.style.opacity = '1'; setTimeout(() => { el.style.transition = ''; }, dur); });
+  } else {
+    el.style.opacity = '1';
+    requestAnimationFrame(() => {
+      el.style.opacity = '0';
+      setTimeout(() => { el.setAttribute('hidden',''); el.setAttribute('aria-hidden','true'); el.style.display = 'none'; el.style.transition = ''; }, dur);
+    });
+  }
 }
