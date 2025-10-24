@@ -138,17 +138,32 @@ function normalizeStyle(v: any): string {
   return String(v);
 }
 
+// Directive and attribute constants
 const BOOLEAN_ATTRS = new Set([
   "checked","disabled","readonly","required","open","selected","hidden",
   "autofocus","multiple","muted","playsinline","controls"
 ]);
 
+const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "TEMPLATE"]);
+
+const DIRECTIVES = {
+  IF: new Set(['s-if', '@if']),
+  SHOW: new Set(['s-show', '@show']),
+  ELSE: new Set(['s-else', '@else']),
+  EACH: new Set(['s-each', '@each'])
+};
+
 function hasBraces(v: string | null): boolean {
   return !!(v && v.includes("{"));
 }
 
+function isDirective(name: string): boolean {
+  return DIRECTIVES.IF.has(name) || DIRECTIVES.SHOW.has(name) || 
+         DIRECTIVES.ELSE.has(name) || DIRECTIVES.EACH.has(name);
+}
+
 function shouldBindAttr(name: string, value: string | null): boolean {
-  if (name === "s-if" || name === "s-show" || name === "@if" || name === "@show" || name === 's-else' || name === '@else' || name === 's-each' || name === '@each') return true;
+  if (isDirective(name)) return true;
   if (name === "value" || name === "disabled" || name === "checked") return true;
   if (name === "class" || name === "style") return hasBraces(value);
   return hasBraces(value);
@@ -166,6 +181,135 @@ function scheduleRender(root: Element) {
     const state = rootStateMap.get(root);
     if (state) renderBindings(state, root);
   });
+}
+
+// Directive handlers
+function handleIfDirective(el: Element, expr: string, state: Scope): void {
+  const show = Boolean(evalInScope(expr, state));
+  let placeholder = ifPlaceholders.get(el);
+  
+  if (!placeholder) {
+    placeholder = document.createComment('if');
+    try { el.parentNode?.insertBefore(placeholder, el); } catch {}
+    ifPlaceholders.set(el, placeholder);
+  }
+  
+  const parent = placeholder.parentNode;
+  if (!parent) return;
+  
+  // Find else sibling if present
+  const elseSibling = findElseSibling(el);
+  
+  if (show) {
+    if (placeholder.nextSibling !== el) {
+      try { parent.insertBefore(el, placeholder.nextSibling); } catch {}
+    }
+    if (elseSibling?.parentNode) {
+      try { elseSibling.parentNode.removeChild(elseSibling); } catch {}
+    }
+  } else {
+    if (el.parentNode) {
+      try { el.parentNode.removeChild(el); } catch {}
+    }
+    if (elseSibling && placeholder.nextSibling !== elseSibling) {
+      try { parent.insertBefore(elseSibling, placeholder.nextSibling); } catch {}
+    }
+  }
+}
+
+function findElseSibling(el: Element): Element | null {
+  let sibling = el.nextElementSibling;
+  while (sibling) {
+    if (DIRECTIVES.ELSE.has(sibling.getAttribute('s-else') ? 's-else' : '') ||
+        DIRECTIVES.ELSE.has(sibling.getAttribute('@else') ? '@else' : '')) {
+      return sibling;
+    }
+    if (!isDirective(sibling.tagName)) break;
+    break;
+  }
+  return null;
+}
+
+function handleShowDirective(el: Element, expr: string, state: Scope): void {
+  const visible = Boolean(evalInScope(expr, state));
+  if (visible) {
+    el.removeAttribute('hidden');
+    el.removeAttribute('aria-hidden');
+  } else {
+    el.setAttribute('hidden', '');
+    el.setAttribute('aria-hidden', 'true');
+  }
+}
+
+function parseEachExpression(expr: string): { listExpr: string; itemKey: string; idxKey: string } {
+  const match = expr.match(/^(.*?)(?:\s+as\s+([a-zA-Z_$][\w$]*)(?:\s*,\s*([a-zA-Z_$][\w$]*))?)?$/);
+  return {
+    listExpr: (match?.[1] || expr).trim(),
+    itemKey: (match?.[2] || 'item').trim(),
+    idxKey: (match?.[3] || 'i').trim()
+  };
+}
+
+function handleEachDirective(el: Element, expr: string, state: Scope, root: Element): void {
+  const { listExpr, itemKey, idxKey } = parseEachExpression(expr);
+  let items = evalInScope(listExpr, state) as any[];
+  if (!Array.isArray(items)) items = [];
+  
+  // Skip re-render if items haven't changed
+  const lastItems = eachLastItems.get(el);
+  if (lastItems && lastItems.length === items.length && 
+      lastItems.every((v, i) => v === items[i])) {
+    return;
+  }
+  eachLastItems.set(el, items.slice());
+  
+  let placeholder = eachPlaceholders.get(el);
+  if (!placeholder) {
+    placeholder = document.createComment('each');
+    try { el.parentNode?.insertBefore(placeholder, el); } catch {}
+    eachPlaceholders.set(el, placeholder);
+    const template = el.cloneNode(true) as Element;
+    eachTemplates.set(el, template);
+    try { el.parentNode?.removeChild(el); } catch {}
+  }
+  
+  const parent = placeholder.parentNode;
+  if (!parent) return;
+  
+  // Cleanup previous children
+  const previousChildren = eachChildren.get(el) || [];
+  for (const child of previousChildren) {
+    try { destroy(child); } catch {}
+    try { child.parentNode?.removeChild(child); } catch {}
+  }
+  
+  // Render new children
+  const template = eachTemplates.get(el) as Element;
+  const newChildren: Element[] = [];
+  
+  for (let i = 0; i < items.length; i++) {
+    const clone = template.cloneNode(true) as Element;
+    try { 
+      clone.removeAttribute('s-each');
+      clone.removeAttribute('@each');
+    } catch {}
+    
+    try { parent.insertBefore(clone, placeholder.nextSibling); } catch {}
+    
+    // Create extended state with item and index
+    const extendedState: any = Object.create(state);
+    extendedState[itemKey] = items[i];
+    extendedState[idxKey] = i;
+    
+    const reactiveState = makeReactive(extendedState, clone);
+    rootStateMap.set(clone, reactiveState);
+    collectBindingsForRoot(clone);
+    renderBindings(reactiveState, clone);
+    wireEventHandlers(clone, reactiveState);
+    newChildren.push(clone);
+  }
+  
+  eachChildren.set(el, newChildren);
 }
 
 function renderBindings(state: Scope, root: Element) {
@@ -202,112 +346,19 @@ function renderBindings(state: Scope, root: Element) {
       continue;
     }
     // Conditionals
-    if (attrName === 's-if' || attrName === '@if') {
-      const show = Boolean(evalInScope(expr, state));
-      let ph = ifPlaceholders.get(b.el);
-      if (!ph) {
-        ph = document.createComment('s-if');
-        try { b.el.parentNode?.insertBefore(ph, b.el); } catch {}
-        ifPlaceholders.set(b.el, ph);
-      }
-      const parent = ph.parentNode as Node | null;
-      if (!parent) continue;
-      // find potential else sibling
-      let elseEl: Element | null = null;
-      let sib: Element | null = (b.el as Element).nextElementSibling;
-      while (sib) {
-        if (sib.hasAttribute('s-else') || sib.hasAttribute('@else')) { elseEl = sib; break; }
-        if (!sib.hasAttribute('s-if') && !sib.hasAttribute('@if') && !sib.hasAttribute('s-show') && !sib.hasAttribute('@show')) {
-          // stop scanning at unrelated element (keep only immediate logical pair)
-          break;
-        }
-        break;
-      }
-      if (show) {
-        if (ph.nextSibling !== b.el) {
-          try { parent.insertBefore(b.el, ph.nextSibling); } catch {}
-        }
-        if (elseEl && elseEl.parentNode) {
-          try { elseEl.parentNode.removeChild(elseEl); } catch {}
-        }
-      } else {
-        if (b.el.parentNode) {
-          try { b.el.parentNode.removeChild(b.el); } catch {}
-        }
-        if (elseEl) {
-          if (ph.nextSibling !== elseEl) {
-            try { parent.insertBefore(elseEl, ph.nextSibling); } catch {}
-          }
-        }
-      }
+    if (DIRECTIVES.IF.has(attrName)) {
+      handleIfDirective(b.el, expr, state);
       continue;
     }
-    if (attrName === 's-show' || attrName === '@show') {
-      const vis = Boolean(evalInScope(expr, state));
-      if (vis) {
-        b.el.removeAttribute('hidden');
-        b.el.removeAttribute('aria-hidden');
-      } else {
-        b.el.setAttribute('hidden', '');
-        b.el.setAttribute('aria-hidden', 'true');
-      }
+    if (DIRECTIVES.SHOW.has(attrName)) {
+      handleShowDirective(b.el, expr, state);
       continue;
     }
-    if (attrName === 's-else' || attrName === '@else') {
-      // handled by preceding s-if/@if block
-      continue;
+    if (DIRECTIVES.ELSE.has(attrName)) {
+      continue; // Handled by @if
     }
-    if (attrName === 's-each' || attrName === '@each') {
-      // Parse pattern: "itemsExpr" or "itemsExpr as item,i"
-      const m = expr.match(/^(.*?)(?:\s+as\s+([a-zA-Z_$][\w$]*)(?:\s*,\s*([a-zA-Z_$][\w$]*))?)?$/);
-      const listExpr = (m?.[1] || expr).trim();
-      const itemKey = (m?.[2] || 'item').trim();
-      const idxKey = (m?.[3] || 'i').trim();
-      let items = evalInScope(listExpr, state) as any[];
-      if (!Array.isArray(items)) items = [];
-      // Skip re-render if items haven't changed (shallow check)
-      const last = eachLastItems.get(b.el);
-      if (last && last.length === items.length && last.every((v, i) => v === items[i])) {
-        continue;
-      }
-      eachLastItems.set(b.el, items.slice());
-      let ph = eachPlaceholders.get(b.el);
-      if (!ph) {
-        ph = document.createComment('s-each');
-        try { b.el.parentNode?.insertBefore(ph, b.el); } catch {}
-        eachPlaceholders.set(b.el, ph);
-        // store template (original element) and remove it from DOM
-        const tpl = b.el as Element;
-        eachTemplates.set(b.el, tpl.cloneNode(true) as Element);
-        try { tpl.parentNode?.removeChild(tpl); } catch {}
-      }
-      const parent = ph.parentNode as Node | null;
-      if (!parent) continue;
-      // cleanup previous children
-      const prev = eachChildren.get(b.el) || [];
-      for (const n of prev) {
-        try { destroy(n); } catch {}
-        try { n.parentNode?.removeChild(n); } catch {}
-      }
-      const created: Element[] = [];
-      const tpl = eachTemplates.get(b.el) as Element;
-      for (let i = 0; i < items.length; i++) {
-        const child = tpl.cloneNode(true) as Element;
-        try { child.removeAttribute('s-each'); child.removeAttribute('@each'); } catch {}
-        // mount after placeholder in order
-        try { parent.insertBefore(child, ph.nextSibling); } catch {}
-        // extended state: prototype chain to parent state
-        const ext: any = Object.create(state);
-        ext[itemKey] = items[i];
-        ext[idxKey] = i;
-        const reactive = makeReactive(ext, child);
-        rootStateMap.set(child, reactive);
-        collectBindingsForRoot(child);
-        renderBindings(reactive, child);
-        wireEventHandlers(child, reactive);
-        created.push(child);
-      }
-      eachChildren.set(b.el, created);
+    if (DIRECTIVES.EACH.has(attrName)) {
+      handleEachDirective(b.el, expr, state, root);
       continue;
     }
     // Special cases
@@ -525,29 +576,33 @@ function collectBindingsForRoot(root: Element) {
   attrBindings.set(root, abinds);
 
   // Text interpolations
-  const ibinds: InterpBinding[] = [];
+  const textBindings: InterpBinding[] = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let node: Node | null = walker.nextNode();
+  
   while (node) {
-    const t = node as Text;
-    const parent = t.parentElement;
-    if (parent && ["SCRIPT", "STYLE", "TEMPLATE"].includes(parent.tagName)) {
-      // skip
-    } else {
-      // skip any text nodes that live under an @each/s-each template holder
-      let cur: Element | null = parent;
-      let insideEach = false;
-      while (cur) {
-        if (cur.hasAttribute && (cur.hasAttribute('s-each') || cur.hasAttribute('@each'))) { insideEach = true; break; }
-        cur = cur.parentElement;
-      }
-      if (!insideEach && t.nodeValue && /\{[^}]+\}/.test(t.nodeValue)) {
-        ibinds.push({ node: t, template: t.nodeValue });
+    const textNode = node as Text;
+    const parent = textNode.parentElement;
+    
+    if (parent && !SKIP_TAGS.has(parent.tagName) && !isInsideEachTemplate(parent)) {
+      if (textNode.nodeValue && /\{[^}]+\}/.test(textNode.nodeValue)) {
+        textBindings.push({ node: textNode, template: textNode.nodeValue });
       }
     }
     node = walker.nextNode();
   }
-  interpBindings.set(root, ibinds);
+  interpBindings.set(root, textBindings);
+}
+
+function isInsideEachTemplate(element: Element | null): boolean {
+  let current = element;
+  while (current) {
+    if (current.hasAttribute?.('s-each') || current.hasAttribute?.('@each')) {
+      return true;
+    }
+    current = current.parentElement;
+  }
+  return false;
 }
 
 function wireEventHandlers(root: Element, state: Scope) {
