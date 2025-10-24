@@ -1,0 +1,22 @@
+{
+  "name": "sparkle",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts",
+    "build": "bun build index.ts --outdir dist --target bun",
+    "build:browser": "bun build src/index.ts --outfile app/petite-svelte.js --target browser --format esm",
+    "build:watch": "bun build src/index.ts --outfile app/petite-svelte.js --target browser --format esm --watch",
+    "serve": "bun dev-server.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
