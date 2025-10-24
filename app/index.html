@@ -77,17 +77,25 @@
             <div class="text-sm text-gray-600">Loading/error states, list rendering, retry.</div>
           </a>
         </li>
+        <li>
+          <a href="/tooltip.html" class="block rounded-lg border border-gray-200 p-4 hover:bg-gray-50">
+            <div class="font-semibold">Tooltip (Tippy.js)</div>
+            <div class="text-sm text-gray-600">Hover/focus tooltips via Tippy/Popper.</div>
+          </a>
+        </li>
+        <li>
+          <a href="/select2.html" class="block rounded-lg border border-gray-200 p-4 hover:bg-gray-50">
+            <div class="font-semibold">Select2</div>
+            <div class="text-sm text-gray-600">Single/multiple selects bound to state.</div>
+          </a>
+        </li>
       </ul>
     </section>
 
     <footer class="text-xs text-gray-500">Served by Bun dev server. Edit this page to add more links as we build them.</footer>
   </main>
 
-  <script type="module">
-    import { init } from './sparkle.js';
-    // No scopes on index yet, but keep consistent boot
-    init();
-  </script>
+  <script type="module" src="./sparkle.js" defer init></script>
 </body>
 
 </html>

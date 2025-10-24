@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sparkle: tooltip</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/dist/tippy.css" />
+  <!-- Development -->
+  <script src="https://unpkg.com/@popperjs/core@2/dist/umd/popper.min.js"></script>
+  <script src="https://unpkg.com/tippy.js@6/dist/tippy-bundle.umd.js"></script>
+</head>
+<body class="min-h-dvh bg-white text-gray-900">
+  <main class="mx-auto max-w-3xl p-6 space-y-8">
+    <header class="space-y-2">
+      <h1 class="text-2xl font-bold">Tooltip</h1>
+      <p class="text-sm text-gray-600">Using Tippy.js (Popper under the hood) with hover and focus triggers.</p>
+    </header>
+
+    <!-- Host -->
+    <div use="TooltipDemo"></div>
+
+    <!-- Template -->
+    <template id="tooltip-demo">
+      <div class="space-y-6">
+        <div class="flex items-center gap-4">
+          <button id="save-btn" class="rounded bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-800"
+                  aria-describedby="tip-save">Save</button>
+          <span id="tip-save" class="sr-only">Saves your progress</span>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <a href="#" id="learn-link" class="text-blue-600 hover:underline" aria-describedby="tip-learn">Learn more</a>
+          <span id="tip-learn" class="sr-only">Opens documentation in a new tab</span>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <input id="name" type="text" placeholder="Your name"
+                 class="rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                 aria-describedby="tip-name" />
+          <span id="tip-name" class="sr-only">Enter your full name</span>
+        </div>
+      </div>
+    </template>
+
+    <!-- Logic -->
+    <script>
+      class TooltipDemo {
+        static template = 'tooltip-demo'
+        onMount(root) {
+          const tippy = window.tippy;
+          if (!tippy) return;
+          tippy('#save-btn', { content: 'Saves your progress', delay: [150, 0], placement: 'top' })
+          tippy('#learn-link', { content: 'Opens documentation in a new tab', placement: 'right' })
+          tippy('#name', { content: 'Enter your full name', placement: 'bottom', trigger: 'focus mouseenter' })
+        }
+        onDestroy() {
+          // Let Tippy clean up when the page unloads; in a multi-mount scenario we would store instances and destroy.
+        }
+      }
+    </script>
+
+    <script type="module" src="./sparkle.js" defer init></script>
+  </main>
+</body>
+</html>

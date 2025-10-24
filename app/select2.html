@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sparkle: select2</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+</head>
+<body class="min-h-dvh bg-white text-gray-900">
+  <main class="mx-auto max-w-3xl p-6 space-y-8">
+    <header class="space-y-2">
+      <h1 class="text-2xl font-bold">Select2</h1>
+      <p class="text-sm text-gray-600">Single and multiple selects bound to Sparkle state.</p>
+    </header>
+
+    <!-- Host -->
+    <div use="Select2Demo" class="max-w-2xl"></div>
+
+    <!-- Template -->
+    <template id="select2-demo">
+      <div class="space-y-6">
+        <!-- Single -->
+        <div class="grid gap-2">
+          <label for="country" class="text-sm font-medium">Country</label>
+          <select id="country" class="w-full" :value="country">
+            <option value="">Select…</option>
+            <option value="us">United States</option>
+            <option value="de">Germany</option>
+            <option value="jp">Japan</option>
+          </select>
+          <div class="text-xs text-gray-600">Selected: {country || '—'}</div>
+        </div>
+
+        <!-- Multiple -->
+        <div class="grid gap-2">
+          <label for="tags" class="text-sm font-medium">Tags</label>
+          <select id="tags" class="w-full" multiple>
+            <option value="a">Alpha</option>
+            <option value="b">Beta</option>
+            <option value="c">Gamma</option>
+            <option value="d">Delta</option>
+          </select>
+          <div class="text-xs text-gray-600">Selected tags: {tags.join(', ') || '—'}</div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Logic -->
+    <script>
+      class Select2Demo {
+        static template = 'select2-demo'
+        constructor() {
+          this.country = ''
+          this.tags = []
+        }
+        onMount(host) {
+          const $ = window.jQuery
+          if (!$ || !$.fn.select2) return
+          // Single
+          const $country = $('#country').select2({ width: '100%' })
+          $country.val(this.country || '').trigger('change.select2')
+          $country.on('change', (e) => {
+            this.country = $country.val() || ''
+          })
+          // Multiple
+          const $tags = $('#tags').select2({ width: '100%', placeholder: 'Select tags' })
+          $tags.val(this.tags).trigger('change.select2')
+          $tags.on('change', (e) => {
+            this.tags = ($tags.val() || []).map(String)
+          })
+          // Save instances for cleanup
+          this._select2 = [$country, $tags]
+        }
+        onDestroy() {
+          try { (this._select2 || []).forEach($el => $el.select2('destroy')) } catch {}
+        }
+      }
+    </script>
+
+    <script type="module" src="./sparkle.js" defer init></script>
+  </main>
+</body>
+</html>
