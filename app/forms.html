@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sparkle: forms</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="min-h-dvh bg-white text-gray-900">
+  <main class="mx-auto max-w-3xl p-6 space-y-8">
+    <header class="space-y-2">
+      <h1 class="text-2xl font-bold">Form bindings</h1>
+      <p class="text-sm text-gray-600">Two-way bindings via inline events and value/checked attributes.</p>
+    </header>
+
+    <!-- Host -->
+    <div use="FormsDemo"></div>
+
+    <!-- Template -->
+    <template id="forms">
+      <form class="grid gap-6">
+        <!-- Text -->
+        <div class="grid gap-2">
+          <label class="text-sm font-medium" for="name">Name</label>
+          <input id="name" type="text"
+                 class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                 :value="name"
+                 oninput="name = $event.target.value"
+                 placeholder="Jane Doe" />
+        </div>
+
+        <!-- Textarea -->
+        <div class="grid gap-2">
+          <label class="text-sm font-medium" for="bio">Bio</label>
+          <textarea id="bio"
+                    class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    oninput="bio = $event.target.value">{bio}</textarea>
+        </div>
+
+        <!-- Checkbox -->
+        <div class="flex items-center gap-3">
+          <input id="agree" type="checkbox"
+                 :checked="agree"
+                 onchange="agree = $event.target.checked"
+                 class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+          <label for="agree" class="text-sm">I agree to the terms</label>
+        </div>
+
+        <!-- Conditional block: show extra options only when agreed -->
+        <div @if="agree" class="grid gap-2">
+          <label class="text-sm font-medium" for="country">Country</label>
+          <select id="country"
+                  class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  :value="country"
+                  onchange="country = $event.target.value">
+            <option value="">Select...</option>
+            <option value="us">United States</option>
+            <option value="de">Germany</option>
+            <option value="jp">Japan</option>
+          </select>
+          <p class="text-xs text-gray-600" @show="country==='us'">Shipping is fastest in the US.</p>
+        </div>
+
+        <!-- Radio group -->
+        <fieldset class="grid gap-2">
+          <legend class="text-sm font-medium">Plan</legend>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name="plan" value="free"
+                   :checked="plan==='free'"
+                   onchange="plan = $event.target.value" />
+            Free
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="radio" name="plan" value="pro"
+                   :checked="plan==='pro'"
+                   onchange="plan = $event.target.value" />
+            Pro
+          </label>
+        </fieldset>
+
+        <!-- Range + Number linked -->
+        <div class="grid gap-2">
+          <label class="text-sm font-medium" for="age">Age</label>
+          <div class="flex items-center gap-3">
+            <input id="age" type="range" min="0" max="120"
+                   :value="age"
+                   oninput="age = Number($event.target.value)" />
+            <input type="number" min="0" max="120"
+                   class="w-20 rounded border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                   :value="age"
+                   oninput="age = Number($event.target.value)" />
+          </div>
+        </div>
+
+        <!-- Live state preview -->
+        <div class="rounded border border-gray-200 bg-gray-50 p-3">
+          <div class="text-xs font-semibold text-gray-600 mb-1">State</div>
+          <pre class="text-xs whitespace-pre-wrap">{stateJSON}</pre>
+        </div>
+
+        <!-- Submit (noop demo) -->
+        <div>
+          <button type="button" class="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                  onclick="submitted = true">Submit</button>
+          <span class="ml-2 text-sm { submitted ? '' : 'hidden' }">Submitted!</span>
+        </div>
+      </form>
+    </template>
+
+    <!-- Logic -->
+    <script>
+      class FormsDemo {
+        static template = 'forms'
+        constructor() {
+          this.name = ''
+          this.bio = ''
+          this.agree = false
+          this.plan = 'free'
+          this.country = ''
+          this.age = 25
+          this.submitted = false
+        }
+        get stateJSON() {
+          return JSON.stringify({ name: this.name, bio: this.bio, agree: this.agree, plan: this.plan, country: this.country, age: this.age }, null, 2)
+        }
+      }
+    </script>
+
+    <script type="module">
+      import { init } from './sparkle.js'
+      init()
+    </script>
+  </main>
+</body>
+</html>

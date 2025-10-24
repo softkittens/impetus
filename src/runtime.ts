@@ -6,6 +6,7 @@ type InterpBinding = { node: Text; template: string };
 const attrBindings = new WeakMap<Element, AttrBinding[]>();
 const interpBindings = new WeakMap<Element, InterpBinding[]>();
 const exprCache = new Map<string, Function>();
+const assignCache = new Map<string, Function>();
 const rootStateMap = new WeakMap<Element, Scope>();
 const scheduled = new WeakSet<Element>();
 const initialized = new WeakSet<Element>();
@@ -13,6 +14,7 @@ const reactiveCache = new WeakMap<object, any>();
 const reactiveProxies = new WeakSet<object>();
 const proxyRoots = new WeakMap<object, Set<Element>>();
 const listenerMap = new WeakMap<Element, { el: EventTarget; event: string; handler: EventListener }[]>();
+const ifPlaceholders = new WeakMap<Element, Comment>();
 const componentInstance = new WeakMap<Element, any>();
 const ctorCache = new Map<string, any>();
 
@@ -47,6 +49,21 @@ function evalInScope(expr: string, state: Scope, $event?: Event) {
     return fn(state, $event);
   } catch (e) {
     console.warn("sparkle: eval error", expr, e);
+    return undefined;
+  }
+}
+
+function assignInScope(path: string, state: Scope, value: any) {
+  try {
+    let fn = assignCache.get(path);
+    if (!fn) {
+      // eslint-disable-next-line no-new-func
+      fn = new Function('state', '__v', `with(state){ return (${path} = __v) }`);
+      assignCache.set(path, fn);
+    }
+    return fn(state, value);
+  } catch (e) {
+    console.warn('sparkle: assign error', path, e);
     return undefined;
   }
 }
@@ -127,6 +144,7 @@ function hasBraces(v: string | null): boolean {
 }
 
 function shouldBindAttr(name: string, value: string | null): boolean {
+  if (name === "s-if" || name === "s-show" || name === "@if" || name === "@show" || name === 's-else' || name === '@else') return true;
   if (name === "value" || name === "disabled" || name === "checked") return true;
   if (name === "class" || name === "style") return hasBraces(value);
   return hasBraces(value);
@@ -152,6 +170,89 @@ function renderBindings(state: Scope, root: Element) {
     const raw = b.expr || "";
     const expr = unwrapExpr(raw);
     const attrName = b.attr;
+    // s-model (two-way) is represented as data-model marker and an attr 'value'
+    if (attrName === 'value' && (b.el as Element).hasAttribute('data-model')) {
+      const tag = b.el.tagName;
+      if (tag === 'INPUT') {
+        const typ = (b.el as HTMLInputElement).type;
+        if (typ === 'checkbox') {
+          const bv = Boolean(evalInScope(expr, state));
+          setBooleanProp(b.el, 'checked', bv);
+          if (bv) (b.el as Element).setAttribute('checked', ''); else (b.el as Element).removeAttribute('checked');
+          continue;
+        }
+        if (typ === 'radio') {
+          const modelVal = evalInScope(expr, state);
+          const elVal = (b.el as HTMLInputElement).value;
+          const isChecked = String(modelVal) === String(elVal);
+          setBooleanProp(b.el, 'checked', isChecked);
+          if (isChecked) (b.el as Element).setAttribute('checked', ''); else (b.el as Element).removeAttribute('checked');
+          continue;
+        }
+      }
+      // default path: set value prop/attr
+      const v = evalInScope(expr, state);
+      setValueProp(b.el, v);
+      if (v == null || v === false) (b.el as Element).removeAttribute('value');
+      else (b.el as Element).setAttribute('value', String(v));
+      continue;
+    }
+    // Conditionals
+    if (attrName === 's-if' || attrName === '@if') {
+      const show = Boolean(evalInScope(expr, state));
+      let ph = ifPlaceholders.get(b.el);
+      if (!ph) {
+        ph = document.createComment('s-if');
+        try { b.el.parentNode?.insertBefore(ph, b.el); } catch {}
+        ifPlaceholders.set(b.el, ph);
+      }
+      const parent = ph.parentNode as Node | null;
+      if (!parent) continue;
+      // find potential else sibling
+      let elseEl: Element | null = null;
+      let sib: Element | null = (b.el as Element).nextElementSibling;
+      while (sib) {
+        if (sib.hasAttribute('s-else') || sib.hasAttribute('@else')) { elseEl = sib; break; }
+        if (!sib.hasAttribute('s-if') && !sib.hasAttribute('@if') && !sib.hasAttribute('s-show') && !sib.hasAttribute('@show')) {
+          // stop scanning at unrelated element (keep only immediate logical pair)
+          break;
+        }
+        break;
+      }
+      if (show) {
+        if (ph.nextSibling !== b.el) {
+          try { parent.insertBefore(b.el, ph.nextSibling); } catch {}
+        }
+        if (elseEl && elseEl.parentNode) {
+          try { elseEl.parentNode.removeChild(elseEl); } catch {}
+        }
+      } else {
+        if (b.el.parentNode) {
+          try { b.el.parentNode.removeChild(b.el); } catch {}
+        }
+        if (elseEl) {
+          if (ph.nextSibling !== elseEl) {
+            try { parent.insertBefore(elseEl, ph.nextSibling); } catch {}
+          }
+        }
+      }
+      continue;
+    }
+    if (attrName === 's-show' || attrName === '@show') {
+      const vis = Boolean(evalInScope(expr, state));
+      if (vis) {
+        b.el.removeAttribute('hidden');
+        b.el.removeAttribute('aria-hidden');
+      } else {
+        b.el.setAttribute('hidden', '');
+        b.el.setAttribute('aria-hidden', 'true');
+      }
+      continue;
+    }
+    if (attrName === 's-else' || attrName === '@else') {
+      // handled by preceding s-if/@if block
+      continue;
+    }
     // Special cases
     if (attrName === "class") {
       let output = "";
@@ -347,6 +448,18 @@ function collectBindingsForRoot(root: Element) {
   const all = root.querySelectorAll("*");
   all.forEach((el) => {
     for (const { name, value } of Array.from(el.attributes)) {
+      // Two-way model shorthand: :value="expr"
+      if (name === ':value') {
+        abinds.push({ el, attr: 'value', expr: value || "" });
+        try { el.setAttribute('data-model', value || ''); el.removeAttribute(name); } catch {}
+        continue;
+      }
+      if (name === 'value') {
+        if (hasBraces(value)) {
+          abinds.push({ el, attr: name, expr: value || "" });
+        }
+        continue;
+      }
       if (shouldBindAttr(name, value)) {
         abinds.push({ el, attr: name, expr: value || "" });
       }
@@ -375,6 +488,32 @@ function wireEventHandlers(root: Element, state: Scope) {
   const listeners: { el: Element; event: string; handler: EventListener }[] = [];
   const all = root.querySelectorAll("*");
   all.forEach((el) => {
+    // Auto-wire two-way model if present
+    if ((el as Element).hasAttribute('data-model')) {
+      const path = (el as Element).getAttribute('data-model') || '';
+      const tag = el.tagName;
+      let evt = 'input';
+      if (tag === 'SELECT') evt = 'change';
+      if (tag === 'INPUT') {
+        const typ = (el as HTMLInputElement).type;
+        if (typ === 'checkbox' || typ === 'radio') evt = 'change';
+      }
+      const handler = (ev: Event) => {
+        const t = ev.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+        let nv: any;
+        if (t instanceof HTMLInputElement && t.type === 'checkbox') {
+          nv = t.checked;
+        } else if (t instanceof HTMLInputElement && (t.type === 'number' || t.type === 'range')) {
+          nv = t.value === '' ? '' : Number(t.value);
+        } else {
+          nv = (t as any).value;
+        }
+        assignInScope(path, state, nv);
+        scheduleRender(root);
+      };
+      el.addEventListener(evt, handler as EventListener);
+      listeners.push({ el: el as any, event: evt, handler: handler as EventListener });
+    }
     for (const { name, value } of Array.from(el.attributes)) {
       if (name.startsWith("on") && name.length > 2) {
         const event = name.slice(2);
