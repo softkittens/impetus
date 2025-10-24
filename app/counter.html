@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sparkle: demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      padding: 2rem;
+    }
+
+    .card {
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      max-width: 420px;
+    }
+
+    button {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid #11182722;
+      border-radius: 0.375rem;
+      background: #111827;
+      color: white;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>sparkle demo</h1>
+
+  <!-- Hosts using the new API -->
+  <div use="Counter" class="card" props='{"start": 1}'></div>
+  <div use="FancyCounter" class="card"></div>
+  <div use="Counter" class="card" template="counter" max="7"></div>
+
+  <!-- Templates referenced by id -->
+  <template id="counter">
+    <div class="max-w-sm rounded-lg border border-gray-200 p-4 space-y-3">
+      <p class="text-lg font-semibold">Count: {count}</p>
+      <div class="flex items-center gap-2">
+        <button class="px-3 py-2 rounded bg-gray-900 text-white disabled:opacity-50" onclick="inc()"
+          disabled="count >= max">+</button>
+      </div>
+    </div>
+  </template>
+
+  <!-- Logic: multiple classes can live in one script tag -->
+  <script>
+    class Counter {
+      static template = 'counter';
+      constructor(props = {}) {
+        this.count = props.start ?? 0;
+        this.max = props.max ?? 5;
+      }
+      inc() { this.count++; }
+      onMount() { }
+      onDestroy() { }
+    }
+
+    class FancyCounter {
+      static template = 'counter';
+      constructor(props = {}) {
+        this.count = props.start ?? 10;
+        this.max = 10;
+      }
+      inc() { this.count++; }
+    }
+  </script>
+
+  <script type="module">
+    import { init } from './sparkle.js';
+    init();
+  </script>
+</body>
+
+</html>
