@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>sparkle: dropdown</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+
+<body class="min-h-dvh bg-white text-gray-900">
+    <main class="mx-auto max-w-3xl p-6 space-y-8">
+        <header class="space-y-2">
+            <h1 class="text-2xl font-bold">Dropdown</h1>
+            <p class="text-sm text-gray-600">Simple dropdown using Sparkle components (use + template).</p>
+        </header>
+
+        <!-- Host -->
+        <div use="Dropdown" class="max-w-sm"></div>
+
+        <!-- Template -->
+        <template id="dropdown">
+            <div 
+                class="relative inline-block text-left w-full" 
+                onclick="$event.outside && (open = false)"
+                onkeydown="($event.key==='Escape') && (open = false)" 
+                tabindex="0"
+            >
+                <div>
+                    <button
+                        class="inline-flex w-full justify-between gap-2 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                        onclick="toggle()" aria-haspopup="true" aria-expanded="{open}">
+                        <span>{label}</span>
+                        <svg class="h-4 w-4 opacity-80" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd"
+                                d="M5.23 7.21a.75.75 0 011.06.02L10 11.188l3.71-3.957a.75.75 0 111.08 1.04l-4.24 4.52a.75.75 0 01-1.08 0L5.25 8.27a.75.75 0 01-.02-1.06z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="absolute z-10 mt-2 w-full origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black/5 
+                focus:outline-none { open ? '' : 'hidden' }">
+                    <ul class="py-1">
+                        <li onclick="select(items[0])" class="px-4 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                            {items[0]}</li>
+                        <li onclick="select(items[1])" class="px-4 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                            {items[1]}</li>
+                        <li onclick="select(items[2])" class="px-4 py-2 text-sm hover:bg-gray-50 cursor-pointer">
+                            {items[2]}</li>
+                    </ul>
+                </div>
+            </div>
+        </template>
+
+        <!-- Logic -->
+        <script>
+            class Dropdown {
+                static template = 'dropdown'
+                constructor(props = {}) {
+                    this.items = props.items ?? ['First', 'Second', 'Third']
+                    this.value = this.items[0]
+                    this.open = false
+                }
+                get label() { return this.value }
+                toggle() { this.open = !this.open }
+                select(v) { this.value = v; this.open = false }
+                // onMount not required for outside-click anymore due to $event.outside
+                onDestroy() { }
+            }
+        </script>
+
+        <script type="module">
+            import { init } from './sparkle.js'
+            init()
+        </script>
+    </main>
+</body>
+
+</html>

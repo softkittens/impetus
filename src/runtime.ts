@@ -26,6 +26,15 @@ function compile(expr: string): Function {
   return fn;
 }
 
+function unwrapExpr(raw: string): string {
+  let s = (raw || "").trim();
+  // Remove one or two layers of surrounding braces if present
+  const stripOnce = (t: string) => (t.startsWith("{") && t.endsWith("}") ? t.slice(1, -1).trim() : t);
+  s = stripOnce(s);
+  s = stripOnce(s);
+  return s;
+}
+
 function evalInScope(expr: string, state: Scope, $event?: Event) {
   try {
     const fn = compile(expr);
@@ -88,21 +97,43 @@ function scheduleRender(root: Element) {
 function renderBindings(state: Scope, root: Element) {
   const alist = attrBindings.get(root) || [];
   for (const b of alist) {
-    const v = evalInScope(b.expr, state);
+    const raw = b.expr || "";
+    const expr = unwrapExpr(raw);
     const attrName = b.attr;
     // Special cases
     if (attrName === "class") {
-      const cls = normalizeClass(v);
-      if (cls) b.el.setAttribute("class", cls);
+      let output = "";
+      if (raw.includes("{")) {
+        output = raw.replace(/\{([^}]+)\}/g, (_, ex) => {
+          const val = evalInScope(unwrapExpr(String(ex)), state);
+          return normalizeClass(val);
+        });
+      } else {
+        // No dynamic parts: leave as-is (but normalize if it's an expression-only binding)
+        output = raw;
+      }
+      output = output.trim().replace(/\s+/g, " ");
+      if (output) b.el.setAttribute("class", output);
       else b.el.removeAttribute("class");
       continue;
     }
     if (attrName === "style") {
-      const st = normalizeStyle(v);
+      let st = "";
+      if (raw.includes("{")) {
+        // Replace each {expr} with normalized style string of its value (object or string)
+        st = raw.replace(/\{([^}]+)\}/g, (_, ex) => {
+          const val = evalInScope(unwrapExpr(String(ex)), state);
+          return normalizeStyle(val);
+        });
+      } else {
+        st = raw;
+      }
+      st = st.trim().replace(/;+\s*$/g, "");
       if (st) b.el.setAttribute("style", st);
       else b.el.removeAttribute("style");
       continue;
     }
+    const v = evalInScope(expr, state);
     if (attrName === "value") {
       setValueProp(b.el, v);
       if (v == null || v === false) b.el.removeAttribute("value");
@@ -201,6 +232,9 @@ function setupScope(root: Element) {
         if ((value || "").includes("{")) {
           abinds.push({ el, attr: name, expr: value || "" });
         }
+      } else if ((value || "").includes("{")) {
+        // Any attribute whose value contains braces becomes an expression binding (e.g., aria-*)
+        abinds.push({ el, attr: name, expr: value || "" });
       }
     }
   });
@@ -234,12 +268,23 @@ function setupScope(root: Element) {
     for (const { name, value } of Array.from(el.attributes)) {
       if (name.startsWith("on") && name.length > 2) {
         const event = name.slice(2); // onclick -> click
+        const needsOutside = (value || '').includes('$event.outside');
+        const target: EventTarget = needsOutside ? document : el;
         const handler = (ev: Event) => {
-          evalInScope(value, state, ev);
+          const wrapped = new Proxy(ev as any, {
+            get(t, p) {
+              if (p === 'outside') {
+                return !(root.contains(ev.target as Node));
+              }
+              // @ts-ignore
+              return t[p];
+            }
+          });
+          evalInScope(value, state, wrapped as any);
           scheduleRender(root);
         };
-        el.addEventListener(event, handler);
-        listeners.push({ el, event, handler });
+        target.addEventListener(event, handler as EventListener, needsOutside ? true : false);
+        listeners.push({ el: target as any, event, handler: handler as EventListener });
         // Remove native inline handler to avoid global-scope eval like inc is not defined
         try { el.removeAttribute(name); } catch {}
       }
@@ -340,6 +385,8 @@ export function init(selector: string = "[scope]") {
 
     if (initialized.has(host)) continue;
     initialized.add(host);
+    // Expose host to instance
+    try { (instance as any).$el = host; } catch {}
     const reactive = makeReactive(instance, host);
     rootStateMap.set(host, reactive);
     componentInstance.set(host, instance);
@@ -355,6 +402,8 @@ export function init(selector: string = "[scope]") {
           if ((value || '').includes('{')) {
             abinds.push({ el, attr: aname, expr: value || '' });
           }
+        } else if ((value || '').includes('{')) {
+          abinds.push({ el, attr: aname, expr: value || '' });
         }
       }
     });
@@ -381,19 +430,30 @@ export function init(selector: string = "[scope]") {
       for (const { name: aname, value } of Array.from(el.attributes)) {
         if (aname.startsWith('on') && aname.length > 2) {
           const event = aname.slice(2);
+          const needsOutside = (value || '').includes('$event.outside');
+          const target: EventTarget = needsOutside ? document : el;
           const handler = (ev: Event) => {
-            evalInScope(value, reactive, ev);
+            const wrapped = new Proxy(ev as any, {
+              get(t, p) {
+                if (p === 'outside') {
+                  return !(host.contains(ev.target as Node));
+                }
+                // @ts-ignore
+                return t[p];
+              }
+            });
+            evalInScope(value, reactive, wrapped as any);
             scheduleRender(host);
           };
-          el.addEventListener(event, handler);
-          listeners.push({ el, event, handler });
+          target.addEventListener(event, handler as EventListener, needsOutside ? true : false);
+          listeners.push({ el: target as any, event, handler: handler as EventListener });
           // prevent native inline handler from executing in global scope
           try { el.removeAttribute(aname); } catch {}
         }
       }
     });
     if (listeners.length) listenerMap.set(host, listeners);
-    try { instance?.onMount?.() } catch {}
+    try { instance?.onMount?.(host) } catch {}
   }
 }
 

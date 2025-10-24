@@ -17,6 +17,13 @@ function compile(expr) {
   }
   return fn;
 }
+function unwrapExpr(raw) {
+  let s = (raw || "").trim();
+  const stripOnce = (t) => t.startsWith("{") && t.endsWith("}") ? t.slice(1, -1).trim() : t;
+  s = stripOnce(s);
+  s = stripOnce(s);
+  return s;
+}
 function evalInScope(expr, state, $event) {
   try {
     const fn = compile(expr);
@@ -74,24 +81,44 @@ function scheduleRender(root) {
 function renderBindings(state, root) {
   const alist = attrBindings.get(root) || [];
   for (const b of alist) {
-    const v = evalInScope(b.expr, state);
+    const raw = b.expr || "";
+    const expr = unwrapExpr(raw);
     const attrName = b.attr;
     if (attrName === "class") {
-      const cls = normalizeClass(v);
-      if (cls)
-        b.el.setAttribute("class", cls);
+      let output = "";
+      if (raw.includes("{")) {
+        output = raw.replace(/\{([^}]+)\}/g, (_, ex) => {
+          const val = evalInScope(unwrapExpr(String(ex)), state);
+          return normalizeClass(val);
+        });
+      } else {
+        output = raw;
+      }
+      output = output.trim().replace(/\s+/g, " ");
+      if (output)
+        b.el.setAttribute("class", output);
       else
         b.el.removeAttribute("class");
       continue;
     }
     if (attrName === "style") {
-      const st = normalizeStyle(v);
+      let st = "";
+      if (raw.includes("{")) {
+        st = raw.replace(/\{([^}]+)\}/g, (_, ex) => {
+          const val = evalInScope(unwrapExpr(String(ex)), state);
+          return normalizeStyle(val);
+        });
+      } else {
+        st = raw;
+      }
+      st = st.trim().replace(/;+\s*$/g, "");
       if (st)
         b.el.setAttribute("style", st);
       else
         b.el.removeAttribute("style");
       continue;
     }
+    const v = evalInScope(expr, state);
     if (attrName === "value") {
       setValueProp(b.el, v);
       if (v == null || v === false)
@@ -183,6 +210,8 @@ function setupScope(root) {
         if ((value || "").includes("{")) {
           abinds.push({ el, attr: name, expr: value || "" });
         }
+      } else if ((value || "").includes("{")) {
+        abinds.push({ el, attr: name, expr: value || "" });
       }
     }
   });
@@ -205,12 +234,22 @@ function setupScope(root) {
     for (const { name, value } of Array.from(el.attributes)) {
       if (name.startsWith("on") && name.length > 2) {
         const event = name.slice(2);
+        const needsOutside = (value || "").includes("$event.outside");
+        const target = needsOutside ? document : el;
         const handler = (ev) => {
-          evalInScope(value, state, ev);
+          const wrapped = new Proxy(ev, {
+            get(t, p) {
+              if (p === "outside") {
+                return !root.contains(ev.target);
+              }
+              return t[p];
+            }
+          });
+          evalInScope(value, state, wrapped);
           scheduleRender(root);
         };
-        el.addEventListener(event, handler);
-        listeners.push({ el, event, handler });
+        target.addEventListener(event, handler, needsOutside ? true : false);
+        listeners.push({ el: target, event, handler });
         try {
           el.removeAttribute(name);
         } catch {}
@@ -316,6 +355,9 @@ function init(selector = "[scope]") {
     if (initialized.has(host))
       continue;
     initialized.add(host);
+    try {
+      instance.$el = host;
+    } catch {}
     const reactive = makeReactive(instance, host);
     rootStateMap.set(host, reactive);
     componentInstance.set(host, instance);
@@ -329,6 +371,8 @@ function init(selector = "[scope]") {
           if ((value || "").includes("{")) {
             abinds.push({ el, attr: aname, expr: value || "" });
           }
+        } else if ((value || "").includes("{")) {
+          abinds.push({ el, attr: aname, expr: value || "" });
         }
       }
     });
@@ -351,12 +395,22 @@ function init(selector = "[scope]") {
       for (const { name: aname, value } of Array.from(el.attributes)) {
         if (aname.startsWith("on") && aname.length > 2) {
           const event = aname.slice(2);
+          const needsOutside = (value || "").includes("$event.outside");
+          const target = needsOutside ? document : el;
           const handler = (ev) => {
-            evalInScope(value, reactive, ev);
+            const wrapped = new Proxy(ev, {
+              get(t, p) {
+                if (p === "outside") {
+                  return !host.contains(ev.target);
+                }
+                return t[p];
+              }
+            });
+            evalInScope(value, reactive, wrapped);
             scheduleRender(host);
           };
-          el.addEventListener(event, handler);
-          listeners.push({ el, event, handler });
+          target.addEventListener(event, handler, needsOutside ? true : false);
+          listeners.push({ el: target, event, handler });
           try {
             el.removeAttribute(aname);
           } catch {}
@@ -366,7 +420,7 @@ function init(selector = "[scope]") {
     if (listeners.length)
       listenerMap.set(host, listeners);
     try {
-      instance?.onMount?.();
+      instance?.onMount?.(host);
     } catch {}
   }
 }
