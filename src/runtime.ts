@@ -513,7 +513,8 @@ function makeReactive<T extends object>(obj: T, root: Element): T {
     },
     set(target, prop, value, receiver) {
       const res = Reflect.set(target, prop, value, receiver);
-      const roots = proxyRoots.get(proxy) || new Set<Element>([root]);
+      const roots = proxyRoots.get(proxy) || new Set<Element>();
+      if (roots.size === 0) roots.add(root);
       proxyRoots.set(proxy, roots);
       roots.forEach((r) => scheduleRender(r));
       return res;
@@ -593,13 +594,19 @@ function collectBindingsForRoot(root: Element) {
     collectBindingsForRoot(host);
     renderBindings(reactive, host);
     wireEventHandlers(host, reactive);
-    if (!inherit) { try { (instance as any)?.onMount?.(host) } catch {} }
+    if (!inherit) { try { (instance as any)?.onMount?.call(reactive, host) } catch {} }
   }
 
   // Attribute bindings
   const abinds: AttrBinding[] = [];
   const all = [root, ...Array.from(root.querySelectorAll("*"))] as Element[];
   all.forEach((el) => {
+    // If this element is inside an @each template holder, skip collecting here.
+    // The clone pass will collect bindings per repeated instance.
+    const isHolder = el.hasAttribute('s-each') || el.hasAttribute('@each');
+    if (!isHolder && isInsideEachTemplate(el)) {
+      return;
+    }
     const attrs = Array.from(el.attributes);
     const hasEach = attrs.some(a => a.name === 's-each' || a.name === '@each');
     for (const { name, value } of attrs) {
@@ -861,7 +868,7 @@ export function init(selector: string = "[scope]") {
     renderBindings(reactive, host);
     // Events
     wireEventHandlers(host, reactive);
-    if (!inherit) { try { instance?.onMount?.(host) } catch {} }
+    if (!inherit) { try { instance?.onMount?.call(reactive, host) } catch {} }
   }
 }
 
