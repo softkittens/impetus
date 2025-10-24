@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>sparkle: datepicker</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js"></script>
+  <script src="https://unpkg.com/@popperjs/core@2/dist/umd/popper.min.js"></script>
+  <style>
+    .dp-shadow{ box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
+    .dp-cell{ width: 2.25rem; height: 2.25rem; line-height: 2.25rem; }
+  </style>
+</head>
+<body class="min-h-dvh bg-white text-gray-900">
+  <main class="mx-auto max-w-xl p-6 space-y-6">
+    <header class="space-y-2">
+      <h1 class="text-2xl font-bold">Datepicker (Sparkle + date-fns + Popper)</h1>
+      <p class="text-sm text-gray-600">A flatpickr-like datepicker with keyboard and outside click to close.</p>
+    </header>
+
+    <!-- Host -->
+    <div use="DatePicker" class="max-w-sm"></div>
+
+    <!-- Template -->
+    <template id="datepicker">
+      <div class="space-y-3" onclick="onWrapperClick($event)">
+        <!-- Input row -->
+        <div class="flex items-center gap-2">
+          <input id="dp-input" type="text" readonly
+                 class="w-56 rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                 value="{formatted}"
+                 placeholder="YYYY-MM-DD"
+                 onclick="open()" />
+          <button class="rounded bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-800" onclick="toggle()">📅</button>
+        </div>
+
+        <div class="flex items-center justify-between text-sm text-gray-700">
+          <div>
+            <div class="text-xs text-gray-500">Selected</div>
+            <div class="font-medium">{ selectedLabel }</div>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="inline-flex items-center gap-1 cursor-pointer select-none">
+              <input type="checkbox" onclick="onToggleRange($event)" />
+              <span class="text-xs text-gray-600">Range</span>
+            </label>
+            <button class="rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-100" onclick="clear()">Clear</button>
+          </div>
+        </div>
+
+        <!-- Popover panel -->
+        <div id="dp-panel" class="z-20 mt-2 w-80 rounded border border-gray-200 bg-white dp-shadow"
+             role="dialog" aria-modal="true"
+             @show="openPanel" @transition="fade:120">
+          <!-- Header: month nav -->
+          <div class="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+            <button class="rounded px-2 py-1 text-sm hover:bg-gray-100" onclick="prevMonth()">‹</button>
+            <div class="text-sm font-medium">{monthLabel}</div>
+            <button class="rounded px-2 py-1 text-sm hover:bg-gray-100" onclick="nextMonth()">›</button>
+          </div>
+
+          <!-- Weekdays -->
+          <div class="grid grid-cols-7 gap-1 px-3 pt-2 text-[10px] uppercase tracking-wide text-gray-500">
+            <div class="text-center">Su</div>
+            <div class="text-center">Mo</div>
+            <div class="text-center">Tu</div>
+            <div class="text-center">We</div>
+            <div class="text-center">Th</div>
+            <div class="text-center">Fr</div>
+            <div class="text-center">Sa</div>
+          </div>
+
+          <!-- Grid -->
+          <div class="grid grid-cols-7 gap-1 px-3 pb-3 pt-2" onclick="onGridClick($event)">
+            <div @each="days as d,i" key="d.key">
+              <button class="dp-cell w-full rounded text-sm text-center hover:bg-gray-100 { d.isToday ? 'ring-1 ring-blue-500' : '' } { d.isOther ? 'text-gray-400' : 'text-gray-900' } { d.isSelected ? 'bg-blue-600 text-white hover:bg-blue-600' : '' } { d.isInRange ? 'bg-blue-50' : '' } { d.isRangeEdge ? 'bg-blue-200' : '' }"
+                      data-key="{d.key}"
+                      aria-current="{ d.isToday ? 'date' : 'false' }"
+                      aria-selected="{ d.isSelected }"
+              >{d.label}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Logic -->
+    <script>
+      const { startOfMonth, endOfMonth, startOfWeek, addDays, addMonths, isSameDay, isSameMonth, format, isToday, isAfter, isBefore } = dateFns
+
+      class DatePicker {
+        static template = 'datepicker'
+        constructor() {
+          const today = new Date()
+          this.current = new Date(today.getFullYear(), today.getMonth(), 1)
+          this.range = false
+          this.value = null
+          this.start = null
+          this.end = null
+          this.openPanel = false
+          this.popper = null
+          this.recompute()
+        }
+        get monthLabel() { return format(this.current, 'MMMM yyyy') }
+        get formatted() {
+          if (this.range) {
+            if (this.start && this.end) return format(this.start, 'yyyy-MM-dd') + ' → ' + format(this.end, 'yyyy-MM-dd')
+            if (this.start) return format(this.start, 'yyyy-MM-dd') + ' → '
+            return ''
+          }
+          return this.value ? format(this.value, 'yyyy-MM-dd') : ''
+        }
+        get selectedLabel() {
+          if (this.range) {
+            if (this.start && this.end) return format(this.start, 'MMM d, yyyy') + ' – ' + format(this.end, 'MMM d, yyyy')
+            if (this.start) return format(this.start, 'MMM d, yyyy') + ' – …'
+            return '—'
+          }
+          return this.value ? format(this.value, 'MMM d, yyyy') : '—'
+        }
+
+        prevMonth() { this.current = addMonths(this.current, -1); this.recompute() }
+        nextMonth() { this.current = addMonths(this.current, 1); this.recompute() }
+
+        open() { this.openPanel = true; this.afterOpen() }
+        toggle() { this.openPanel = !this.openPanel; if (this.openPanel) this.afterOpen() }
+        close() { this.openPanel = false }
+
+        afterOpen() {
+          const input = document.getElementById('dp-input')
+          const panel = document.getElementById('dp-panel')
+          if (!input || !panel) return
+          try { this.popper?.destroy?.() } catch {}
+          this.popper = Popper.createPopper(input, panel, { placement: 'bottom-start', modifiers: [{ name:'offset', options:{ offset:[0,8]}}] })
+        }
+
+        onWrapperClick($event) {
+          // close when clicking outside of the wrapper
+          if ($event.outside) this.close()
+        }
+
+        select(date) {
+          if (!this.range) {
+            this.value = date;
+            this.start = null; this.end = null;
+            this.recompute();
+            this.close();
+            return;
+          }
+          // range selection: pick start then end; reorder if needed
+          if (!this.start || (this.start && this.end)) {
+            this.start = date; this.end = null;
+            this.recompute();
+          } else if (this.start && !this.end) {
+            if (isBefore(date, this.start)) { this.end = this.start; this.start = date } else { this.end = date }
+            this.recompute();
+            this.close();
+          }
+        }
+
+        onGridClick($event) {
+          const btn = $event.target.closest('button[data-key]')
+          if (!btn) return
+          const key = Number(btn.getAttribute('data-key'))
+          const found = this.days?.find?.(d => d.key === key)
+          if (found) this.select(found.date)
+        }
+
+        onToggleRange($event) {
+          this.range = !!$event.target.checked;
+          if (!this.range) { this.start = null; this.end = null; }
+          this.recompute();
+        }
+
+        toggleRange() { this.range = !this.range; if (!this.range) { this.start = null; this.end = null } this.recompute() }
+        clear() { this.value = null; this.start = null; this.end = null; this.recompute() }
+
+        recompute() {
+          const start = startOfWeek(startOfMonth(this.current), { weekStartsOn: 0 })
+          const end = addDays(endOfMonth(this.current), 6) // ensure 6 rows
+          const days = []
+          let d = start
+          while (d <= end) {
+            const isOther = !isSameMonth(d, this.current)
+            const selectedSingle = this.value ? isSameDay(d, this.value) : false
+            const isStart = this.start ? isSameDay(d, this.start) : false
+            const isEnd = this.end ? isSameDay(d, this.end) : false
+            const inRange = (this.start && this.end) ? (isAfter(d, this.start) && isBefore(d, this.end)) : false
+            days.push({
+              key: d.getTime(),
+              date: new Date(d),
+              label: String(d.getDate()),
+              isOther,
+              isToday: isToday(d),
+              isSelected: this.range ? (isStart || isEnd) : !!selectedSingle,
+              isInRange: this.range ? inRange : false,
+              isRangeEdge: this.range ? (isStart || isEnd) : false,
+            })
+            d = addDays(d, 1)
+          }
+          this.days = days
+        }
+      }
+    </script>
+
+    <script type="module" src="./sparkle.js" defer init></script>
+  </main>
+</body>
+</html>

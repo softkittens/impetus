@@ -555,7 +555,13 @@ function renderBindings(state: Scope, root: Element) {
 |
 */
 
-function makeReactive<T extends object>(obj: T, root: Element): T {
+function isPlainObject(v: any): boolean {
+  if (v === null || typeof v !== 'object') return false;
+  const proto = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+
+function makeReactive<T extends object>(obj: T, root: Element, isRoot: boolean = false): T {
   if (obj === null || typeof obj !== "object") return obj;
   // If this is already one of our proxies, just register the root and return it
   if (reactiveProxies.has(obj as unknown as object)) {
@@ -575,11 +581,15 @@ function makeReactive<T extends object>(obj: T, root: Element): T {
   const proxy = new Proxy(obj as unknown as object, {
     get(target, prop, receiver) {
       const val = Reflect.get(target, prop, receiver);
-      if (typeof val === 'function') {
+      // Bind only root instance methods so `this` points at the proxy in templates
+      if (isRoot && typeof val === 'function') {
         try { return val.bind(receiver); } catch { return val; }
       }
-      if (val && typeof val === "object") {
-        return makeReactive(val as any, root);
+      // Recurse only into plain objects and arrays; leave other instances (Date, Map, DOM, etc.) intact
+      if (val && typeof val === 'object') {
+        if (Array.isArray(val) || isPlainObject(val)) {
+          return makeReactive(val as any, root, false);
+        }
       }
       return val;
     },
@@ -684,7 +694,7 @@ function mountComponent(host: Element, className: string, inherit: boolean): voi
   if (!inherit) { try { (instance as any).$el = host; } catch {} }
   // Ensure components see the global shared store in expressions via with(state)
   try { (instance as any).$store = makeReactive((globalThis as any).__sparkleStore || ((globalThis as any).__sparkleStore = {}), host); } catch {}
-  const reactive = makeReactive(instance, host);
+  const reactive = makeReactive(instance, host, true);
   rootStateMap.set(host, reactive);
   if (!inherit) componentInstance.set(host, instance);
   collectBindingsForRoot(host);
@@ -899,7 +909,7 @@ function setupScope(root: Element) {
   if (initialized.has(root)) return;
   initialized.add(root);
 
-  const state = makeReactive(initial, root);
+  const state = makeReactive(initial, root, true);
   rootStateMap.set(root, state);
   try { (state as any).$store = makeReactive((globalThis as any).__sparkleStore || ((globalThis as any).__sparkleStore = {}), root); } catch {}
 
