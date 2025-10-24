@@ -10,6 +10,8 @@ const rootStateMap = new WeakMap<Element, Scope>();
 const scheduled = new WeakSet<Element>();
 const initialized = new WeakSet<Element>();
 const reactiveCache = new WeakMap<object, any>();
+const reactiveProxies = new WeakSet<object>();
+const proxyRoots = new WeakMap<object, Set<Element>>();
 const listenerMap = new WeakMap<Element, { el: EventTarget; event: string; handler: EventListener }[]>();
 const componentInstance = new WeakMap<Element, any>();
 const ctorCache = new Map<string, any>();
@@ -47,6 +49,29 @@ function evalInScope(expr: string, state: Scope, $event?: Event) {
     console.warn("sparkle: eval error", expr, e);
     return undefined;
   }
+}
+
+function resolveCtor(name: string): any {
+  const g = (globalThis as any)[name];
+  if (typeof g === 'function') return g;
+  if (ctorCache.has(name)) return ctorCache.get(name);
+  try {
+    const scripts = Array.from(document.querySelectorAll('script')) as HTMLScriptElement[];
+    const code = scripts
+      .filter(s => !s.type || s.type === 'text/javascript')
+      .map(s => s.textContent || '')
+      .join('\n');
+    const found = new Function(
+      'return (function(){\n' +
+      code +
+      `\n;try { return typeof ${name}==='function' ? ${name} : null } catch(_) { return null }\n})()`
+    )();
+    if (typeof found === 'function') {
+      ctorCache.set(name, found);
+      return found;
+    }
+  } catch {}
+  return undefined;
 }
 
 // ----------------------------------------
@@ -206,11 +231,27 @@ function renderBindings(state: Scope, root: Element) {
 
 function makeReactive<T extends object>(obj: T, root: Element): T {
   if (obj === null || typeof obj !== "object") return obj;
+  // If this is already one of our proxies, just register the root and return it
+  if (reactiveProxies.has(obj as unknown as object)) {
+    const roots = proxyRoots.get(obj as unknown as object) || new Set<Element>();
+    roots.add(root);
+    proxyRoots.set(obj as unknown as object, roots);
+    return obj;
+  }
   const existing = reactiveCache.get(obj as unknown as object);
-  if (existing) return existing;
+  if (existing) {
+    // Register this root as another view of the same proxy
+    const roots = proxyRoots.get(existing) || new Set<Element>();
+    roots.add(root);
+    proxyRoots.set(existing, roots);
+    return existing as T;
+  }
   const proxy = new Proxy(obj as unknown as object, {
     get(target, prop, receiver) {
       const val = Reflect.get(target, prop, receiver);
+      if (typeof val === 'function') {
+        try { return val.bind(receiver); } catch { return val; }
+      }
       if (val && typeof val === "object") {
         return makeReactive(val as any, root);
       }
@@ -218,16 +259,23 @@ function makeReactive<T extends object>(obj: T, root: Element): T {
     },
     set(target, prop, value, receiver) {
       const res = Reflect.set(target, prop, value, receiver);
-      scheduleRender(root);
+      const roots = proxyRoots.get(proxy) || new Set<Element>([root]);
+      proxyRoots.set(proxy, roots);
+      roots.forEach((r) => scheduleRender(r));
       return res;
     },
     deleteProperty(target, prop) {
       const res = Reflect.deleteProperty(target, prop);
-      scheduleRender(root);
+      const roots = proxyRoots.get(proxy) || new Set<Element>([root]);
+      proxyRoots.set(proxy, roots);
+      roots.forEach((r) => scheduleRender(r));
       return res;
     },
   });
   reactiveCache.set(obj as unknown as object, proxy);
+  reactiveProxies.add(proxy);
+  // Register initial root
+  proxyRoots.set(proxy, new Set<Element>([root]));
   return proxy as T;
 }
 
@@ -236,6 +284,64 @@ function makeReactive<T extends object>(obj: T, root: Element): T {
 // ----------------------------------------
 
 function collectBindingsForRoot(root: Element) {
+  // Inline template anchors: <div template="id"></div>
+  const anchors = Array.from(root.querySelectorAll('[template]')) as Element[];
+  for (const el of anchors) {
+    const id = el.getAttribute('template');
+    if (!id) continue;
+    const tpl = document.getElementById(id) as HTMLTemplateElement | null;
+    if (tpl && tpl.tagName === 'TEMPLATE') {
+      try {
+        el.innerHTML = '';
+        el.appendChild(tpl.content.cloneNode(true));
+        // avoid re-processing this as an anchor repeatedly
+        el.removeAttribute('template');
+      } catch (e) {
+        console.warn('sparkle: failed to mount template anchor', id, e);
+      }
+    } else {
+      console.warn('sparkle: template anchor id not found', id);
+    }
+  }
+
+  // Mount nested component hosts inside this root (if any)
+  const nestedHosts = Array.from(root.querySelectorAll('[use]:not(template):not(script)')) as Element[];
+  for (const host of nestedHosts) {
+    if (initialized.has(host)) continue;
+    const className = (host.getAttribute('use') || '').trim();
+    if (!className) continue;
+    // Resolve ctor
+    const ctor: any = resolveCtor(className);
+    if (typeof ctor !== 'function') continue;
+    const inherit = host.hasAttribute('inherit');
+    let instance: any;
+    if (inherit) {
+      let par: Element | null = host.parentElement; let inherited: Scope | undefined;
+      while (par && !inherited) { const s = rootStateMap.get(par as Element); if (s) inherited = s; par = par.parentElement; }
+      instance = inherited ?? {};
+    } else {
+      try { instance = new ctor({}); } catch { instance = {}; }
+    }
+    const hostTpl = host.getAttribute('template');
+    const staticTpl = (ctor as any).template; const instTpl = (instance as any)?.template;
+    const tplId = hostTpl || staticTpl || instTpl;
+    if (tplId) {
+      const el = document.getElementById(String(tplId)) as HTMLTemplateElement | null;
+      if (el && el.tagName === 'TEMPLATE') { host.innerHTML=''; host.appendChild(el.content.cloneNode(true)); }
+    }
+    initialized.add(host);
+    if (!inherit) { try { (instance as any).$el = host; } catch {} }
+    const reactive = makeReactive(instance, host);
+    rootStateMap.set(host, reactive);
+    if (!inherit) componentInstance.set(host, instance);
+    // Each nested host will collect its own bindings/events later when init/render runs for it
+    // but we call collect/render here to make it eager and ready
+    collectBindingsForRoot(host);
+    renderBindings(reactive, host);
+    wireEventHandlers(host, reactive);
+    if (!inherit) { try { (instance as any)?.onMount?.(host) } catch {} }
+  }
+
   // Attribute bindings
   const abinds: AttrBinding[] = [];
   const all = root.querySelectorAll("*");
@@ -366,41 +472,34 @@ export function init(selector: string = "[scope]") {
   for (const host of hosts) {
     const className = (host.getAttribute('use') || '').trim();
     if (!className) continue;
-    function resolveCtor(name: string) {
-      const g = (globalThis as any)[name];
-      if (typeof g === 'function') return g;
-      if (ctorCache.has(name)) return ctorCache.get(name);
-      // Evaluate all non-module scripts to retrieve the class by name
-      try {
-        const scripts = Array.from(document.querySelectorAll('script')) as HTMLScriptElement[];
-        const code = scripts
-          .filter(s => !s.type || s.type === 'text/javascript')
-          .map(s => s.textContent || '')
-          .join('\n');
-        const found = new Function(
-          'return (function(){\n' +
-          code +
-          `\n;try { return typeof ${name}==='function' ? ${name} : null } catch(_) { return null }\n})()`
-        )();
-        if (typeof found === 'function') {
-          ctorCache.set(name, found);
-          return found;
-        }
-      } catch (e) {
-        console.warn('sparkle: ctor eval error for', name, e);
-      }
-      return undefined;
-    }
     const ctor = resolveCtor(className);
     if (typeof ctor !== 'function') {
       console.warn('sparkle: constructor not found on global scope for', className);
       continue;
     }
+    const inherit = host.hasAttribute('inherit');
     const props = parseProps(host);
     let instance: any;
-    try { instance = new ctor(props); } catch (e) {
-      console.warn('sparkle: error constructing', className, e);
-      instance = {};
+    if (inherit) {
+      // find nearest parent root with a state
+      let par: Element | null = host.parentElement;
+      let inherited: Scope | undefined;
+      while (par && !inherited) {
+        const s = rootStateMap.get(par as Element);
+        if (s) inherited = s;
+        par = par.parentElement;
+      }
+      if (!inherited) {
+        console.warn('sparkle: inherit requested but no parent state found for', className);
+        try { instance = new ctor(props); } catch { instance = {}; }
+      } else {
+        instance = inherited;
+      }
+    } else {
+      try { instance = new ctor(props); } catch (e) {
+        console.warn('sparkle: error constructing', className, e);
+        instance = {};
+      }
     }
 
     // Resolve template id: host attr -> static -> instance
@@ -420,11 +519,11 @@ export function init(selector: string = "[scope]") {
 
     if (initialized.has(host)) continue;
     initialized.add(host);
-    // Expose host to instance
-    try { (instance as any).$el = host; } catch {}
+    // Expose host to instance only when not inheriting (avoid clobbering parent's $el)
+    if (!inherit) { try { (instance as any).$el = host; } catch {} }
     const reactive = makeReactive(instance, host);
     rootStateMap.set(host, reactive);
-    componentInstance.set(host, instance);
+    if (!inherit) componentInstance.set(host, instance);
 
     // Collect bindings & interpolations inside host
     collectBindingsForRoot(host);
@@ -432,7 +531,7 @@ export function init(selector: string = "[scope]") {
     renderBindings(reactive, host);
     // Events
     wireEventHandlers(host, reactive);
-    try { instance?.onMount?.(host) } catch {}
+    if (!inherit) { try { instance?.onMount?.(host) } catch {} }
   }
 }
 
