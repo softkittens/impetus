@@ -7,17 +7,15 @@ import { attrHandlers, handleGenericAttribute } from './attributes';
 import { getAttributeBindings, getInterpolationBindings } from './bindings';
 
 export function renderBindings(state: Scope, root: Element): void {
-  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
   try { (window as any).devhooks?.onRenderStart?.(root); } catch {}
   
   // Render attribute bindings
   renderAttributeBindings(state, root);
   
-  const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
-  try { (window as any).devhooks?.onRenderEnd?.(root, { duration: t1 && t0 ? (t1 - t0) : 0 }); } catch {}
-  
   // Render text interpolations
   renderTextInterpolations(state, root);
+  
+  try { (window as any).devhooks?.onRenderEnd?.(root); } catch {}
 }
 
 function renderAttributeBindings(state: Scope, root: Element): void {
@@ -48,55 +46,31 @@ function renderAttributeBindings(state: Scope, root: Element): void {
 }
 
 function handleDirective(el: Element, attrName: string, expr: string, state: Scope, root: Element): boolean {
-  // @if directive
-  if (DIRECTIVES.IF.has(attrName)) {
-    try { (window as any).devhooks?.onDirective?.(el, '@if', { expr }); } catch {}
-    directiveHandlers[attrName]?.(el, expr, state, root);
+  // Handle all directives in a unified way
+  if (DIRECTIVES.IF.has(attrName) || DIRECTIVES.SHOW.has(attrName) || DIRECTIVES.EACH.has(attrName)) {
+    try { (window as any).devhooks?.onDirective?.(el, attrName, { expr }); } catch {}
+    directiveHandlers[attrName]?.(el, expr, state, attrName === '@show' ? undefined : root);
     return true;
   }
   
-  // @show directive
-  if (DIRECTIVES.SHOW.has(attrName)) {
-    try { (window as any).devhooks?.onDirective?.(el, '@show', { expr }); } catch {}
-    directiveHandlers[attrName]?.(el, expr, state);
-    return true;
-  }
-  
-  // @else directive (handled by @if)
-  if (DIRECTIVES.ELSE.has(attrName)) {
-    return true;
-  }
-  
-  // @each directive
-  if (DIRECTIVES.EACH.has(attrName)) {
-    try { (window as any).devhooks?.onDirective?.(el, '@each', { expr }); } catch {}
-    directiveHandlers[attrName]?.(el, expr, state, root);
-    return true;
-  }
-  
-  // @transition directive (consumed by @show/@if handlers)
-  if (DIRECTIVES.TRANSITION.has(attrName)) {
-    return true;
-  }
-  
-  return false;
+  // @else and @transition are consumed by other handlers
+  return DIRECTIVES.ELSE.has(attrName) || DIRECTIVES.TRANSITION.has(attrName);
 }
 
 function renderTextInterpolations(state: Scope, root: Element): void {
   const bindings = getInterpolationBindings(root);
   
   for (const binding of bindings) {
-    // Support escaping with double braces {{ and }} to output literal braces
-    const tpl = binding.template
+    // Handle escaped braces and interpolate
+    const rendered = binding.template
       .replace(/\{\{/g, PLACEHOLDERS.LBRACE)
-      .replace(/\}\}/g, PLACEHOLDERS.RBRACE);
-    
-    const rendered = tpl.replace(/\{([^}]+)\}/g, (_, expr) => {
-      const v = evalInScope(String(expr).trim(), state);
-      return v == null ? "" : String(v);
-    })
-    .replace(new RegExp(PLACEHOLDERS.LBRACE, "g"), "{")
-    .replace(new RegExp(PLACEHOLDERS.RBRACE, "g"), "}");
+      .replace(/\}\}/g, PLACEHOLDERS.RBRACE)
+      .replace(/\{([^}]+)\}/g, (_, expr) => {
+        const v = evalInScope(String(expr).trim(), state);
+        return v == null ? "" : String(v);
+      })
+      .replace(new RegExp(PLACEHOLDERS.LBRACE, "g"), "{")
+      .replace(new RegExp(PLACEHOLDERS.RBRACE, "g"), "}");
     
     binding.node.textContent = rendered;
   }

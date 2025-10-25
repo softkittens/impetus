@@ -19,8 +19,7 @@ export function compile(expr: string): Function {
 
 export function evalInScope(expr: string, state: Scope, $event?: Event) {
   try {
-    const fn = compile(expr);
-    return fn(state, $event);
+    return compile(expr)(state, $event);
   } catch (e) {
     console.warn("impetus: eval error", expr, e);
     return undefined;
@@ -70,25 +69,32 @@ export function assignInScope(path: string, state: Scope, value: any) {
 }
 
 export function resolveCtor(name: string): any {
-  const g = (globalThis as any)[name];
-  if (typeof g === 'function') return g;
+  // Check global scope first
+  const global = (globalThis as any)[name];
+  if (typeof global === 'function') return global;
+  
+  // Check cache
   if (ctorCache.has(name)) return ctorCache.get(name);
+  
+  // Search in script tags
   try {
     const scripts = Array.from(document.querySelectorAll('script')) as HTMLScriptElement[];
     const code = scripts
       .filter(s => !s.type || s.type === 'text/javascript')
       .map(s => s.textContent || '')
       .join('\n');
+    
     const found = new Function(
-      'return (function(){\n' +
-      code +
+      'return (function(){\n' + code + 
       `\n;try { return typeof ${name}==='function' ? ${name} : null } catch(_) { return null }\n})()`
     )();
+    
     if (typeof found === 'function') {
       ctorCache.set(name, found);
       return found;
     }
   } catch {}
+  
   return undefined;
 }
 

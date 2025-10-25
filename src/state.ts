@@ -18,20 +18,18 @@ export class StateManager {
       this.scheduled.delete(root);
       const state = this.rootStateMap.get(root);
       if (state) {
-        // Call all registered render callbacks
+        // Call render callbacks with error handling
         this.renderCallbacks.forEach(callback => {
-          try {
-            callback(state, root);
-          } catch (e) {
-            console.warn('impetus: render callback error', e);
-          }
+          try { callback(state, root); } 
+          catch (e) { console.warn('impetus: render callback error', e); }
         });
-        // This will be injected to avoid circular dependency
+        // Injected renderBindings for DOM updates
         (this as any).renderBindings?.(state, root);
       }
     });
   }
 
+  // Core state methods
   setRootState(root: Element, state: Scope): void {
     this.rootStateMap.set(root, state);
   }
@@ -40,6 +38,7 @@ export class StateManager {
     return this.rootStateMap.get(root);
   }
 
+  // Root management
   addRoot(root: Element): void {
     this.allRoots.add(root);
   }
@@ -52,20 +51,22 @@ export class StateManager {
     return Array.from(this.allRoots);
   }
 
+  // Initialization tracking
   isInitialized(root: Element): boolean {
     return this.scheduled.has(root) || this.rootStateMap.has(root);
   }
 
+  markInitialized(root: Element): void {
+    this.scheduled.add(root);
+  }
+
+  // Render callback management
   setRenderCallback(callback: (state: Scope, root: Element) => void): void {
     this.renderCallbacks.add(callback);
   }
 
   removeRenderCallback(callback: (state: Scope, root: Element) => void): void {
     this.renderCallbacks.delete(callback);
-  }
-
-  markInitialized(root: Element): void {
-    this.scheduled.add(root);
   }
 
   // Test helpers

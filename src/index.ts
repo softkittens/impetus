@@ -12,7 +12,22 @@ import { mountComponent, destroyComponent } from './components';
 import { applyTransition } from './transitions';
 import { getDevtoolsHooks } from './devtools';
 
-// Setup global references for cross-module communication
+// Setup global references for cross-module communication and external access
+const impetus = {
+  stateManager,
+  makeReactive,
+  evalInScope,
+  init,
+  destroy,
+  mountComponent,
+  applyTransition,
+  devhooks: getDevtoolsHooks()
+};
+
+// Make available globally for external use and cross-module communication
+(window as any).impetus = impetus;
+
+// Restore necessary global references for component system compatibility
 (window as any).stateManager = stateManager;
 (window as any).makeReactive = makeReactive;
 (window as any).collectBindingsForRoot = collectBindingsForRoot;
