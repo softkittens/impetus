@@ -1,3 +1,20 @@
+/**
+ * Tests for utility functions in the Impetus framework
+ * 
+ * This test suite verifies that all utility functions work correctly.
+ * Utility functions are the building blocks that the framework relies on,
+ * so it's critical that they handle all edge cases properly.
+ * 
+ * The tests cover:
+ * - String case conversion (camelCase ↔ kebab-case)
+ * - Type coercion from strings
+ * - Class and style normalization
+ * - Expression parsing and manipulation
+ * - Directive detection
+ * - Props parsing from DOM elements
+ * - DOM traversal helpers
+ */
+
 import { expect, test, describe } from "./setup";
 import {
   toCamel,
@@ -21,6 +38,12 @@ import { DIRECTIVES } from "../src/constants";
 
 describe("Utils", () => {
   describe("toCamel", () => {
+    /**
+     * Test basic kebab-case to camelCase conversion
+     * 
+     * This is the most common use case - converting HTML attribute names
+     * to JavaScript property names.
+     */
     test("converts kebab-case to camelCase", () => {
       expect(toCamel("hello-world")).toBe("helloWorld");
       expect(toCamel("data-user-id")).toBe("dataUserId");
@@ -29,6 +52,11 @@ describe("Utils", () => {
       expect(toCamel("")).toBe("");
     });
 
+    /**
+     * Test edge cases that might break naive implementations
+     * 
+     * These tests ensure the function handles unusual inputs gracefully.
+     */
     test("handles edge cases", () => {
       expect(toCamel("camelCase")).toBe("camelCase");
       expect(toCamel("multiple--dashes")).toBe("multipleDashes");
@@ -38,6 +66,12 @@ describe("Utils", () => {
   });
 
   describe("toKebab", () => {
+    /**
+     * Test basic camelCase to kebab-case conversion
+     * 
+     * This is used when converting JavaScript property names to CSS names.
+     * The improved implementation handles consecutive uppercase letters.
+     */
     test("converts camelCase to kebab-case", () => {
       expect(toKebab("helloWorld")).toBe("hello-world");
       expect(toKebab("userId")).toBe("user-id");
@@ -46,6 +80,11 @@ describe("Utils", () => {
       expect(toKebab("")).toBe("");
     });
 
+    /**
+     * Test edge cases including acronyms and numbers
+     * 
+     * These ensure the function works with real-world property names.
+     */
     test("handles edge cases", () => {
       expect(toKebab("kebab-case")).toBe("kebab-case");
       expect(toKebab("test123Value")).toBe("test123-value");
@@ -54,6 +93,12 @@ describe("Utils", () => {
   });
 
   describe("coerce", () => {
+    /**
+     * Test type coercion from string values
+     * 
+     * HTML attributes are always strings, but we need them as proper types.
+     * The order of checks is important to avoid false positives.
+     */
     test("coerces string values to appropriate types", () => {
       expect(coerce("true")).toBe(true);
       expect(coerce("false")).toBe(false);
@@ -67,6 +112,11 @@ describe("Utils", () => {
       expect(coerce("  123  ")).toBe(123);
     });
 
+    /**
+     * Test edge cases that might confuse the coercion logic
+     * 
+     * These ensure the function handles whitespace and negative numbers.
+     */
     test("handles edge cases", () => {
       expect(coerce("   ")).toBe("   ");
       expect(coerce("-42")).toBe(-42);
@@ -75,6 +125,12 @@ describe("Utils", () => {
   });
 
   describe("normalizeClass", () => {
+    /**
+     * Test class value normalization to strings
+     * 
+     * The function should handle strings, arrays, objects, and other types.
+     * Falsy values should be filtered out appropriately.
+     */
     test("normalizes class values to strings", () => {
       expect(normalizeClass("hello world")).toBe("hello world");
       expect(normalizeClass(["hello", "world", null, ""])).toBe("hello world");
@@ -85,6 +141,11 @@ describe("Utils", () => {
       expect(normalizeClass(123)).toBe("123");
     });
 
+    /**
+     * Test edge cases including nested arrays and truthy values
+     * 
+     * These ensure the function handles complex input structures.
+     */
     test("handles edge cases", () => {
       expect(normalizeClass([["a", "b"], "c"])).toBe("a b c");
       expect(normalizeClass(["a", false, "b", null, "c", undefined])).toBe("a b c");
@@ -93,6 +154,12 @@ describe("Utils", () => {
   });
 
   describe("normalizeStyle", () => {
+    /**
+     * Test style value normalization to CSS strings
+     * 
+     * The function should handle both string and object inputs.
+     * Null and false values should be excluded from the output.
+     */
     test("normalizes style values to CSS strings", () => {
       expect(normalizeStyle("color: red; background: blue")).toBe("color: red; background: blue");
       expect(normalizeStyle({ color: "red", background: "blue" })).toBe("color:red;background:blue");
@@ -103,6 +170,11 @@ describe("Utils", () => {
       expect(normalizeStyle("color: red;")).toBe("color: red;"); // Fixed expectation
     });
 
+    /**
+     * Test edge cases with camelCase property names
+     * 
+     * These ensure JavaScript property names are converted to CSS names.
+     */
     test("handles edge cases", () => {
       expect(normalizeStyle({ 
         fontSize: "14px", 
@@ -120,6 +192,12 @@ describe("Utils", () => {
   });
 
   describe("unwrapExpr", () => {
+    /**
+     * Test expression unwrapping (removing outer braces)
+     * 
+     * This function should handle single and double braces,
+     * as well as whitespace around the expression.
+     */
     test("removes surrounding braces from expressions", () => {
       expect(unwrapExpr("{hello}")).toBe("hello");
       expect(unwrapExpr("{{hello}}")).toBe("hello");
@@ -129,6 +207,11 @@ describe("Utils", () => {
       expect(unwrapExpr(null as any)).toBe("");
     });
 
+    /**
+     * Test edge cases with empty braces and whitespace
+     * 
+     * These ensure the function handles unusual but valid inputs.
+     */
     test("handles edge cases", () => {
       expect(unwrapExpr("{}")).toBe("");
       expect(unwrapExpr("{{nested}}")).toBe("nested");
@@ -138,6 +221,11 @@ describe("Utils", () => {
   });
 
   describe("hasBraces", () => {
+    /**
+     * Test brace detection in strings
+     * 
+     * This is used to determine if an attribute contains expressions.
+     */
     test("checks if string contains braces", () => {
       expect(hasBraces("hello {world}")).toBe(true);
       expect(hasBraces("{hello}")).toBe(true);
@@ -148,6 +236,12 @@ describe("Utils", () => {
   });
 
   describe("isDirective", () => {
+    /**
+     * Test directive identification
+     * 
+     * Both s-* and @* variants should be recognized.
+     * Regular attributes should not be identified as directives.
+     */
     test("identifies directive names", () => {
       expect(isDirective("s-if")).toBe(true);
       expect(isDirective("@if")).toBe(true);
@@ -166,6 +260,13 @@ describe("Utils", () => {
   });
 
   describe("shouldBindAttr", () => {
+    /**
+     * Test attribute binding determination
+     * 
+     * This function decides which attributes need reactive updates.
+     * The rules are: directives always bind, form attributes always bind,
+     * class/style bind only with expressions, others bind only with expressions.
+     */
     test("determines if attribute should be bound", () => {
       expect(shouldBindAttr("s-if", "true")).toBe(true);
       expect(shouldBindAttr("@show", "visible")).toBe(true);
@@ -182,6 +283,12 @@ describe("Utils", () => {
   });
 
   describe("isPlainObject", () => {
+    /**
+     * Test plain object identification
+     * 
+     * Plain objects are those created with {} or Object.create(null).
+     * Arrays, dates, and other object types should not be considered plain.
+     */
     test("identifies plain objects", () => {
       expect(isPlainObject({})).toBe(true);
       expect(isPlainObject({ hello: "world" })).toBe(true);
@@ -195,6 +302,12 @@ describe("Utils", () => {
   });
 
   describe("parseEachExpression", () => {
+    /**
+     * Test @each expression parsing
+     * 
+     * The function should extract the list expression, item key, and index key.
+     * Default values should be used when the "as" clause is omitted.
+     */
     test("parses each expressions", () => {
       expect(parseEachExpression("items")).toEqual({
         listExpr: "items",
@@ -221,6 +334,11 @@ describe("Utils", () => {
       });
     });
 
+    /**
+     * Test edge cases with function calls and custom names
+     * 
+     * These ensure the function works with complex expressions.
+     */
     test("handles edge cases", () => {
       expect(parseEachExpression("getFilteredItems() as item, idx")).toEqual({
         listExpr: "getFilteredItems()",
@@ -231,6 +349,12 @@ describe("Utils", () => {
   });
 
   describe("setBooleanProp", () => {
+    /**
+     * Test boolean property setting on elements
+     * 
+     * The function should convert values to boolean and set them.
+     * It should not throw on invalid properties.
+     */
     test("sets boolean properties on elements", () => {
       const div = document.createElement("div");
       
@@ -246,6 +370,12 @@ describe("Utils", () => {
   });
 
   describe("setValueProp", () => {
+    /**
+     * Test value property setting on elements
+     * 
+     * The function should convert values to strings.
+     * Null and undefined should become empty strings.
+     */
     test("sets value properties on elements", () => {
       const input = document.createElement("input");
       
@@ -267,6 +397,12 @@ describe("Utils", () => {
   });
 
   describe("parseProps", () => {
+    /**
+     * Test props parsing from DOM elements
+     * 
+     * The function should combine the "props" attribute with individual attributes.
+     * Data and aria attributes keep their original names, others become camelCase.
+     */
     test("parses component props from element", () => {
       const div = document.createElement("div");
       div.setAttribute("title", "Hello");
@@ -288,6 +424,11 @@ describe("Utils", () => {
       });
     });
 
+    /**
+     * Test invalid JSON handling
+     * 
+     * The function should not throw and should return empty props on error.
+     */
     test("handles invalid props JSON", () => {
       const div = document.createElement("div");
       div.setAttribute("props", "invalid json");
@@ -296,6 +437,11 @@ describe("Utils", () => {
       expect(() => parseProps(div)).not.toThrow();
     });
 
+    /**
+     * Test edge cases with mixed attribute types
+     * 
+     * These ensure the function handles various attribute formats correctly.
+     */
     test("handles edge cases", () => {
       const div = document.createElement("div");
       div.setAttribute("props", '{"invalid": json}');
@@ -325,6 +471,12 @@ describe("Utils", () => {
   });
 
   describe("DOM traversal utilities", () => {
+    /**
+     * Test isInsideEachTemplate function
+     * 
+     * This function checks if an element is inside an @each directive.
+     * It should walk up the DOM tree to find parent elements with the directive.
+     */
     test("isInsideEachTemplate", () => {
       const container = document.createElement("div");
       const eachDiv = document.createElement("div");
@@ -340,6 +492,12 @@ describe("Utils", () => {
       expect(isInsideEachTemplate(null)).toBe(false);
     });
 
+    /**
+     * Test findElseSibling function
+     * 
+     * This function finds the next sibling with an @else directive.
+     * It should only check the immediate next sibling.
+     */
     test("findElseSibling", () => {
       const container = document.createElement("div");
       const ifDiv = document.createElement("div");

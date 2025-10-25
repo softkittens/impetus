@@ -1,21 +1,50 @@
-// Simple, reliable devtools that actually work
+/**
+ * IMPETUS FRAMEWORK - Developer Tools Module
+ * 
+ * This module provides a simple, reliable devtools panel for debugging components.
+ * It allows developers to inspect and edit component state in real-time.
+ * 
+ * WHY THIS MODULE EXISTS:
+ * - Provides real-time state inspection and editing
+ * - Helps debug component behavior and data flow
+ * - Shows all active components in the application
+ * - Enables bidirectional state synchronization for testing
+ */
+
 import { stateManager } from './state';
 import { renderBindings } from './render';
 
+/**
+ * SIMPLE DEVTOOLS CLASS
+ * 
+ * This class creates and manages the devtools panel interface
+ * It provides a clean, minimal debugging experience
+ */
 class SimpleDevtools {
-  private panel: HTMLDivElement | null = null;
-  private textarea: HTMLTextAreaElement | null = null;
-  private isOpen = false;
-  private currentRoot: Element | null = null;
-  private monitorInterval: number | null = null;
+  private panel: HTMLDivElement | null = null;     // The main devtools panel
+  private textarea: HTMLTextAreaElement | null = null; // State editor textarea
+  private isOpen = false;                          // Whether the panel is visible
+  private currentRoot: Element | null = null;      // Currently selected component
+  private monitorInterval: number | null = null;   // Interval for monitoring state changes
 
+  /**
+   * CONSTRUCTOR - Initialize the devtools
+   * 
+   * WHY: Sets up the UI and keyboard shortcuts when devtools are loaded
+   */
   constructor() {
     this.createPanel();
     this.setupKeyboardShortcut();
   }
 
+  /**
+   * CREATE THE DEVTOOLS PANEL UI
+   * 
+   * WHY: Builds the visual interface that developers interact with
+   * The panel includes component selection, state viewing, and editing
+   */
   private createPanel() {
-    // Create panel
+    // Create the main panel container
     this.panel = document.createElement('div');
     this.panel.style.cssText = `
       position: fixed;
@@ -34,7 +63,11 @@ class SimpleDevtools {
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
     `;
 
-    // Create header
+    /**
+     * CREATE THE HEADER SECTION
+     * 
+     * The header contains the title and close button
+     */
     const header = document.createElement('div');
     header.style.cssText = `
       display: flex;
@@ -46,11 +79,17 @@ class SimpleDevtools {
       border-radius: 8px 8px 0 0;
     `;
     
+    // Panel title
     const title = document.createElement('div');
     title.textContent = 'Impetus Devtools';
     title.style.fontWeight = 'bold';
     title.style.color = '#3b82f6';
 
+    /**
+     * CREATE THE CLOSE BUTTON
+     * 
+     * Allows users to close the devtools panel
+     */
     const closeBtn = document.createElement('button');
     closeBtn.textContent = '×';
     closeBtn.style.cssText = `
@@ -67,14 +106,20 @@ class SimpleDevtools {
       align-items: center;
       justify-content: center;
     `;
+    
+    // Add hover effects for better UX
     closeBtn.onmouseover = () => closeBtn.style.background = '#444';
     closeBtn.onmouseout = () => closeBtn.style.background = 'none';
-    closeBtn.onclick = () => this.hide();
+    closeBtn.onclick = () => this.hide(); // Close the panel when clicked
 
     header.appendChild(title);
     header.appendChild(closeBtn);
 
-    // Create content area
+    /**
+     * CREATE THE MAIN CONTENT AREA
+     * 
+     * This contains the component selector and state editor
+     */
     const content = document.createElement('div');
     content.style.cssText = `
       padding: 16px;
@@ -83,12 +128,17 @@ class SimpleDevtools {
       flex-direction: column;
     `;
 
-    // Component selector
+    /**
+     * CREATE THE COMPONENT SELECTOR
+     * 
+     * Allows users to choose which component to inspect/edit
+     */
     const selector = document.createElement('div');
     selector.style.cssText = `
       margin-bottom: 12px;
     `;
     
+    // Label for the component selector
     const selectorLabel = document.createElement('div');
     selectorLabel.textContent = 'Component:';
     selectorLabel.style.cssText = `
@@ -97,6 +147,7 @@ class SimpleDevtools {
       margin-bottom: 4px;
     `;
 
+    // Dropdown to select components
     const componentSelect = document.createElement('select');
     componentSelect.style.cssText = `
       width: 100%;
@@ -112,7 +163,11 @@ class SimpleDevtools {
     selector.appendChild(selectorLabel);
     selector.appendChild(componentSelect);
 
-    // State editor
+    /**
+     * CREATE THE STATE EDITOR
+     * 
+     * This is where users can view and edit component state in real-time
+     */
     const stateLabel = document.createElement('div');
     stateLabel.textContent = 'State (Real-time):';
     stateLabel.style.cssText = `
@@ -121,6 +176,7 @@ class SimpleDevtools {
       margin-bottom: 4px;
     `;
 
+    // Textarea for editing JSON state
     this.textarea = document.createElement('textarea');
     this.textarea.style.cssText = `
       flex: 1;
@@ -135,14 +191,24 @@ class SimpleDevtools {
     `;
     this.textarea.placeholder = 'Select a component to edit its state...';
 
-    // Setup real-time editing with simple debounce
+    /**
+     * SETUP REAL-TIME STATE EDITING
+     * 
+     * This enables bidirectional synchronization:
+     * - When user edits state in devtools → component updates
+     * - When component state changes → devtools updates
+     * 
+     * WHY: We use debouncing to avoid excessive re-renders while typing
+     */
     let editTimeout: number | null = null;
+    
+    // Listen for input events (typing, paste, etc.)
     this.textarea.addEventListener('input', () => {
       if (editTimeout) clearTimeout(editTimeout);
       editTimeout = setTimeout(() => this.updateState(), 100) as unknown as number;
     });
 
-    // Also try keyup as backup
+    // Also listen for keyup as backup (catches some edge cases)
     this.textarea.addEventListener('keyup', () => {
       if (editTimeout) clearTimeout(editTimeout);
       editTimeout = setTimeout(() => this.updateState(), 100) as unknown as number;
@@ -152,26 +218,37 @@ class SimpleDevtools {
     content.appendChild(stateLabel);
     content.appendChild(this.textarea);
 
-    // Store reference to select for later
+    // Store reference to select for later access
     (this as any).componentSelect = componentSelect;
 
-    // Assemble panel
+    // Assemble the complete panel
     this.panel.appendChild(header);
     this.panel.appendChild(content);
 
-    // Add to page
+    // Add the completed panel to the page
     document.body.appendChild(this.panel);
   }
 
+  /**
+   * SETUP KEYBOARD SHORTCUT
+   * 
+   * WHY: Provides quick access to devtools without UI interaction
+   * Ctrl+Shift+D is a common devtools shortcut pattern
+   */
   private setupKeyboardShortcut() {
     document.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-        e.preventDefault();
-        this.toggle();
+        e.preventDefault(); // Prevent browser default behavior
+        this.toggle(); // Show/hide the devtools panel
       }
     });
   }
 
+  /**
+   * TOGGLE PANEL VISIBILITY
+   * 
+   * WHY: Simple helper to switch between show/hide states
+   */
   private toggle() {
     if (this.isOpen) {
       this.hide();
@@ -180,26 +257,44 @@ class SimpleDevtools {
     }
   }
 
+  /**
+   * SHOW THE DEVTOOLS PANEL
+   * 
+   * WHY: Makes the panel visible and starts monitoring
+   */
   private show() {
     if (!this.panel) return;
     this.isOpen = true;
     this.panel.style.display = 'block';
-    this.refreshComponents();
-    this.startStateMonitoring();
+    this.refreshComponents(); // Load available components
+    this.startStateMonitoring(); // Start watching for state changes
   }
 
+  /**
+   * HIDE THE DEVTOOLS PANEL
+   * 
+   * WHY: Hides the panel and stops monitoring to save resources
+   */
   private hide() {
     if (!this.panel) return;
     this.isOpen = false;
     this.panel.style.display = 'none';
-    this.stopStateMonitoring();
+    this.stopStateMonitoring(); // Stop watching for state changes
   }
 
+  /**
+   * START STATE MONITORING
+   * 
+   * WHY: Enables bidirectional synchronization
+   * When component state changes from user interaction, the devtools update
+   */
   private startStateMonitoring() {
     // Monitor state changes every 500ms
+    // WHY: Frequent enough to feel real-time, but not so frequent it hurts performance
     this.monitorInterval = setInterval(() => {
       if (this.currentRoot && this.textarea && !this.textarea.matches(':focus')) {
-        // Only update if textarea is not being edited
+        // Only update if the textarea is not being edited
+        // WHY: Prevents overwriting user input while they're typing
         this.loadState();
       }
     }, 500) as unknown as number;

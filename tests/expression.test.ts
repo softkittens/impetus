@@ -1,3 +1,19 @@
+/**
+ * Tests for expression evaluation in the Impetus framework
+ * 
+ * This test suite verifies that expression compilation, evaluation,
+ * and caching work correctly. Expressions are the heart of the framework's
+ * reactivity system, allowing dynamic content and behavior.
+ * 
+ * The tests cover:
+ * - Expression compilation and caching
+ * - Expression evaluation with scope and event objects
+ * - Computed property caching and invalidation
+ * - Nested property assignment
+ * - Constructor resolution for components
+ * - Cache management utilities
+ */
+
 import { expect, test, describe, beforeEach, afterEach, spyOn } from "./setup";
 import { 
   compile, 
@@ -11,6 +27,12 @@ import {
 } from "../src/expression";
 
 describe("Expression", () => {
+  /**
+   * Clear expression cache before each test
+   * 
+   * This ensures tests don't interfere with each other
+   * and start with a clean slate.
+   */
   beforeEach(() => {
     clearExpressionCache();
   });
@@ -18,17 +40,36 @@ describe("Expression", () => {
   let consoleWarnSpy: any;
   let consoleErrorSpy: any;
 
+  /**
+   * Set up console spies before each test
+   * 
+   * This allows us to verify that error messages are logged
+   * when expressions fail to evaluate.
+   */
   beforeEach(() => {
     consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
   });
 
+  /**
+   * Restore console spies after each test
+   * 
+   * This cleans up after the test and prevents
+   * interference with other tests.
+   */
   afterEach(() => {
     consoleWarnSpy.mockRestore();
     consoleErrorSpy.mockRestore();
   });
 
   describe("compile", () => {
+    /**
+     * Test basic expression compilation and caching
+     * 
+     * The compile function should return a function that can
+     * evaluate the expression. It should also cache compiled
+     * functions to avoid recompilation.
+     */
     test("compiles expressions and caches them", () => {
       const expr1 = "count + 1";
       const expr2 = "name.toUpperCase()";
@@ -48,6 +89,12 @@ describe("Expression", () => {
       expect(getExpressionCacheSize()).toBe(2);
     });
 
+    /**
+     * Test complex expression compilation
+     * 
+     * Complex expressions with arrow functions and array methods
+     * should compile without errors.
+     */
     test("compiles complex expressions", () => {
       const fn = compile("items.filter(i => i.active).length");
       expect(typeof fn).toBe("function");
@@ -55,6 +102,12 @@ describe("Expression", () => {
   });
 
   describe("evalInScope", () => {
+    /**
+     * Test simple expression evaluation
+     * 
+     * Basic expressions should evaluate correctly with access
+     * to the scope object's properties.
+     */
     test("evaluates simple expressions", () => {
       const state = { count: 5, name: "hello" };
       
@@ -64,6 +117,12 @@ describe("Expression", () => {
       expect(evalInScope("name.toUpperCase()", state)).toBe("HELLO");
     });
 
+    /**
+     * Test expression evaluation with event parameter
+     * 
+     * The $event object should be available in expressions
+     * when provided as the third parameter.
+     */
     test("evaluates expressions with event parameter", () => {
       const state = { value: "" };
       const mockEvent = {
@@ -73,6 +132,12 @@ describe("Expression", () => {
       expect(evalInScope("$event.target.value", state, mockEvent)).toBe("test");
     });
 
+    /**
+     * Test handling of undefined properties
+     * 
+     * When accessing undefined properties, the function should
+     * return undefined and log a warning.
+     */
     test("handles undefined properties gracefully", () => {
       const state = { count: 5 };
       
@@ -83,6 +148,12 @@ describe("Expression", () => {
       expect(consoleWarnSpy).toHaveBeenCalledWith("impetus: eval error", "missing.prop", expect.any(ReferenceError));
     });
 
+    /**
+     * Test handling of invalid expressions
+     * 
+     * Syntax errors and runtime errors should be caught,
+     * returning undefined and logging a warning.
+     */
     test("returns undefined for invalid expressions", () => {
       const state = {};
       
@@ -93,6 +164,12 @@ describe("Expression", () => {
       expect(consoleWarnSpy).toHaveBeenCalledWith("impetus: eval error", "(() => { throw new Error('test') })()", expect.any(Error));
     });
 
+    /**
+     * Test complex object access
+     * 
+     * Nested object properties and array access should work
+     * correctly in expressions.
+     */
     test("handles complex object access", () => {
       const state = {
         user: {
@@ -112,6 +189,12 @@ describe("Expression", () => {
   });
 
   describe("evalComputed", () => {
+    /**
+     * Test computed value caching
+     * 
+     * Computed values should be cached per element to avoid
+     * unnecessary re-evaluation.
+     */
     test("caches computed values", () => {
       const state = { count: 5 };
       const element = document.createElement("div");
@@ -123,6 +206,12 @@ describe("Expression", () => {
       expect(result2).toBe(10);
     });
 
+    /**
+     * Test cache invalidation
+     * 
+     * When the cache is invalidated, the expression should
+     * be re-evaluated with the current state.
+     */
     test("invalidates cache when requested", () => {
       const state = { count: 5 };
       const element = document.createElement("div");
@@ -141,6 +230,12 @@ describe("Expression", () => {
       expect(result3).toBe(20); // New value
     });
 
+    /**
+     * Test separate caching for different elements
+     * 
+     * Each element should have its own computed cache
+     * to prevent cross-contamination.
+     */
     test("handles different elements separately", () => {
       const state = { count: 5 };
       const element1 = document.createElement("div");
@@ -155,6 +250,12 @@ describe("Expression", () => {
   });
 
   describe("assignInScope", () => {
+    /**
+     * Test simple property assignment
+     * 
+     * Direct properties should be assigned correctly
+     * and the new value should be returned.
+     */
     test("assigns simple properties", () => {
       const state = { count: 5 };
       
@@ -163,6 +264,12 @@ describe("Expression", () => {
       expect(state.count).toBe(10);
     });
 
+    /**
+     * Test nested property assignment
+     * 
+     * Nested object properties should be assigned correctly
+     * using dot notation.
+     */
     test("assigns nested properties", () => {
       const state = {
         user: {
@@ -177,6 +284,12 @@ describe("Expression", () => {
       expect(state.user.profile.name).toBe("Jane");
     });
 
+    /**
+     * Test assignment to non-existent nested properties
+     * 
+     * The function should not create nested properties
+     * if they don't exist, and should return undefined.
+     */
     test("creates nested properties if they don't exist", () => {
       const state = {};
       
@@ -185,6 +298,12 @@ describe("Expression", () => {
       expect((state as any).new).toBeUndefined(); // It doesn't create nested properties
     });
 
+    /**
+     * Test array access assignment
+     * 
+     * The function only splits on dots, so array bracket
+     * notation is treated as a literal property name.
+     */
     test("handles array access", () => {
       const state = { items: [1, 2, 3] };
       
@@ -196,6 +315,11 @@ describe("Expression", () => {
       expect((state as any)["items[1]"]).toBe(99); // New property created
     });
 
+    /**
+     * Test invalid path handling
+     * 
+     * Empty or whitespace-only paths should return undefined.
+     */
     test("returns undefined for invalid paths", () => {
       const state = {};
       
@@ -203,6 +327,11 @@ describe("Expression", () => {
       expect(assignInScope("   ", state, "value")).toBe(undefined);
     });
 
+    /**
+     * Test assignment through null/undefined intermediate values
+     * 
+     * Cannot assign properties through null or undefined values.
+     */
     test("handles assignment to null/undefined intermediate values", () => {
       const state = { user: null };
       
@@ -213,12 +342,24 @@ describe("Expression", () => {
   });
 
   describe("resolveCtor", () => {
+    /**
+     * Test global constructor resolution
+     * 
+     * Built-in constructors should be resolved correctly
+     * from the global scope.
+     */
     test("resolves global constructors", () => {
       // Test with a built-in constructor
       expect(resolveCtor("Date")).toBe(Date);
       expect(resolveCtor("Array")).toBe(Array);
     });
 
+    /**
+     * Test constructor caching
+     * 
+     * Resolved constructors should be cached to avoid
+     * repeated lookups.
+     */
     test("caches resolved constructors", () => {
       const ctor1 = resolveCtor("Date");
       const ctor2 = resolveCtor("Date");
@@ -226,10 +367,21 @@ describe("Expression", () => {
       expect(ctor1).toBe(ctor2);
     });
 
+    /**
+     * Test non-existent constructor handling
+     * 
+     * Non-existent constructors should return undefined.
+     */
     test("returns undefined for non-existent constructors", () => {
       expect(resolveCtor("NonExistentConstructor")).toBe(undefined);
     });
 
+    /**
+     * Test non-function global handling
+     * 
+     * Global objects that aren't constructors should
+     * return undefined.
+     */
     test("returns undefined for non-function globals", () => {
       expect(resolveCtor("console")).toBe(undefined);
       expect(resolveCtor("Math")).toBe(undefined);
@@ -237,6 +389,11 @@ describe("Expression", () => {
   });
 
   describe("cache management", () => {
+    /**
+     * Test cache clearing
+     * 
+     * The clear function should remove all cached items.
+     */
     test("clearExpressionCache clears all caches", () => {
       // Add some items to cache
       compile("test1");
@@ -250,6 +407,12 @@ describe("Expression", () => {
       expect(getExpressionCacheSize()).toBe(0);
     });
 
+    /**
+     * Test cache size reporting
+     * 
+     * The size function should accurately report the number
+     * of cached items, accounting for duplicates.
+     */
     test("getExpressionCacheSize returns correct size", () => {
       expect(getExpressionCacheSize()).toBe(0);
       
