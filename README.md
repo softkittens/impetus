@@ -3,8 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE) [![Runtime: Bun 1.3+](https://img.shields.io/badge/runtime-bun%201.3%2B-000)](https://bun.sh) [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6)](#)
 
 _HTML-first reactivity. Zero build step._
-
-Build reactive UI in plain HTML — no bundler required. Impetus is a tiny template-and-attributes runtime designed for speed and clarity. Ship a single ESM file and progressively enhance any page.
+# One line. Reactive UI.
 
 ## Get started (CDN)
 
@@ -14,8 +13,6 @@ Build reactive UI in plain HTML — no bundler required. Impetus is a tiny templ
 <div scope='{"count":0}'>
   <button onclick="count++">Clicked {count} times</button>
   <!-- No build step. Works on any static page. -->
-  <!-- Pin to a release tag (e.g. @v0.1.0) when available. -->
-  <!-- Prefer placing the script in <head> with defer. -->
 </div>
 ```
 
@@ -66,7 +63,7 @@ Build reactive UI in plain HTML — no bundler required. Impetus is a tiny templ
 
 ```html
 <!-- Component host (the "component") -->
-<div use="Counter" template="counter" max="5"></div>
+<div use="Counter" max="5"></div>
 
 <!-- Template (can be anywhere on the page) -->
 <template id="counter">
@@ -93,7 +90,7 @@ Build reactive UI in plain HTML — no bundler required. Impetus is a tiny templ
 ```
 
 ## Key Benefits
-- ⚡ **Minimal API**: directives, `{expr}` interpolation, simple components.
+- ⚡ **Minimal API**: directives, inline expressions, simple components.
 - 🔁 **Reactive by default**: Proxy state, microtask-batched renders.
 - 🧩 **Drop-in**: static HTML, no VDOM, no compile step.
 - 🛠️ **Practical DX**: `$event`, outside-click, keyboard helpers.
@@ -180,36 +177,6 @@ Or import explicitly:
 </script>
 ```
 
-Note: Replace `@main` with a tagged release for stability when you publish one (e.g., `@v0.1.0`).
-
-### Local build
-
-1) Build the browser ESM bundle and serve the examples directory:
-
-```bash
-bun run build:browser   # emits app/impetus.js
-bun run serve           # serves ./app
-```
-
-2) In your HTML, include the generated bundle and auto-init:
-
-```html
-<script type="module" src="./impetus.js" defer init></script>
-```
-
-Or import and call `init()` manually:
-
-```html
-<script type="module">
-  import { init } from './impetus.js'
-  init()
-  // or scope-only: init('[scope]')
-  // or enable devtools in watch builds
-</script>
-```
-
-If this helps you ship faster, consider starring the repo.
-
 ### Minimal Example
 
 ```html
@@ -249,7 +216,7 @@ State mounting (scoped root)
 ```
 
 Text interpolation
-- `{expr}` inside text nodes or attribute values renders expression results.
+- Inline expressions render results in text and attributes.
 - Escape braces with double braces: `{{` and `}}`.
 
 Attribute bindings (selected cases)
