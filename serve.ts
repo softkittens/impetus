@@ -12,10 +12,15 @@ if (process.env.WATCH === '1') {
     "--format", "esm",
     "--watch",
   ];
+  
   if (enableDevtools) {
     cmd.push("--define", "DEVTOOLS=true");
     console.log("[dev] devtools enabled via --devtools");
+  } else {
+    cmd.push("--define", "DEVTOOLS=false");
+    console.log("[dev] devtools disabled");
   }
+  
   const child = spawn({
     cmd,
     stdout: "inherit",
@@ -36,6 +41,7 @@ serve({
       if (!(await file.exists())) {
         return new Response("Not Found", { status: 404 });
       }
+      
       return new Response(file);
     } catch (e) {
       return new Response("Internal Server Error", { status: 500 });

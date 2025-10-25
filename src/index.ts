@@ -10,7 +10,19 @@ import { renderBindings } from './render';
 import { wireEventHandlers, removeEventListeners } from './events';
 import { mountComponent, destroyComponent } from './components';
 import { applyTransition } from './transitions';
-import { getDevtoolsHooks } from './devtools';
+// Devtools hooks - stubs when devtools not loaded
+let devhooks: any = undefined;
+export function setDevtoolsHooks(hooks: any): void {
+  devhooks = Object.assign({}, devhooks, hooks);
+}
+export function getDevtoolsHooks(): any {
+  return devhooks;
+}
+export function __dev_get_roots(): Element[] { return []; }
+export function __dev_get_state(root: Element): any { return undefined; }
+export function __dev_get_bindings(root: Element): { attrs: any[]; interps: any[] } {
+  return { attrs: [], interps: [] };
+}
 
 // Setup global references for cross-module communication and external access
 const impetus = {
@@ -21,6 +33,7 @@ const impetus = {
   destroy,
   mountComponent,
   applyTransition,
+  renderBindings,
   devhooks: getDevtoolsHooks()
 };
 
@@ -114,7 +127,6 @@ export function destroy(root: Element): void {
 }
 
 // Re-export commonly used functions
-export { setDevtoolsHooks, __dev_get_roots, __dev_get_state, __dev_get_bindings } from './devtools';
 export { makeReactive } from './state';
 export { evalInScope } from './expression';
 
@@ -132,6 +144,9 @@ if (typeof document !== 'undefined') {
   }
 }
 
-if (typeof DEVTOOLS !== 'undefined' && DEVTOOLS) {
+// Only load devtools when explicitly enabled
+if (typeof DEVTOOLS !== 'undefined' && DEVTOOLS === true) {
+  console.log('[impetus] devtools enabled');
+  // Use the simple, reliable devtools
   import('./devtools').catch(() => {});
 }
