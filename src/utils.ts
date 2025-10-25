@@ -1,12 +1,15 @@
 import { DIRECTIVES } from './constants';
 
 export function toCamel(s: string): string {
-  return s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+  return s.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+          .replace(/-+/g, '') // Remove multiple consecutive dashes
+          .replace(/-$/, ''); // Remove trailing dash
 }
 
 export function toKebab(s: string): string {
   return s
     .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/([A-Z])([A-Z][a-z])/g, "$1-$2") // Handle consecutive uppercase letters
     .replace(/_/g, "-")
     .toLowerCase();
 }
@@ -23,7 +26,12 @@ export function coerce(value: string): any {
 export function normalizeClass(value: any): string {
   if (!value) return "";
   if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.filter(Boolean).map(String).join(" ");
+  if (Array.isArray(value)) {
+    return value.flat(Infinity) // Flatten nested arrays
+                   .filter(Boolean) 
+                   .map(String) 
+                   .join(" ");
+  }
   if (typeof value === "object") return Object.keys(value).filter((k) => value[k]).join(" ");
   return String(value);
 }
@@ -43,8 +51,11 @@ export function normalizeStyle(value: any): string {
 export function unwrapExpr(raw: string): string {
   let s = (raw || "").trim();
   const stripOnce = (t: string) => (t.startsWith("{") && t.endsWith("}")) ? t.slice(1, -1).trim() : t;
+  // Only strip braces twice if the result still has braces
   s = stripOnce(s);
-  s = stripOnce(s);
+  if (s.startsWith("{") && s.endsWith("}")) {
+    s = stripOnce(s);
+  }
   return s;
 }
 

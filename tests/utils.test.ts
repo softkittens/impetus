@@ -28,15 +28,28 @@ describe("Utils", () => {
       expect(toCamel("single")).toBe("single");
       expect(toCamel("")).toBe("");
     });
+
+    test("handles edge cases", () => {
+      expect(toCamel("camelCase")).toBe("camelCase");
+      expect(toCamel("multiple--dashes")).toBe("multipleDashes");
+      expect(toCamel("trailing-")).toBe("trailing");
+      expect(toCamel("-leading")).toBe("Leading");
+    });
   });
 
   describe("toKebab", () => {
     test("converts camelCase to kebab-case", () => {
       expect(toKebab("helloWorld")).toBe("hello-world");
       expect(toKebab("userId")).toBe("user-id");
-      expect(toKebab("HTMLElement")).toBe("htmlelement"); // Fixed expectation
+      expect(toKebab("HTMLElement")).toBe("html-element"); // Improved: handles consecutive uppercase letters
       expect(toKebab("single")).toBe("single");
       expect(toKebab("")).toBe("");
+    });
+
+    test("handles edge cases", () => {
+      expect(toKebab("kebab-case")).toBe("kebab-case");
+      expect(toKebab("test123Value")).toBe("test123-value");
+      expect(toKebab("XMLHttpRequest")).toBe("xml-http-request");
     });
   });
 
@@ -53,6 +66,12 @@ describe("Utils", () => {
       expect(coerce("hello")).toBe("hello");
       expect(coerce("  123  ")).toBe(123);
     });
+
+    test("handles edge cases", () => {
+      expect(coerce("   ")).toBe("   ");
+      expect(coerce("-42")).toBe(-42);
+      expect(coerce("3.14")).toBe(3.14);
+    });
   });
 
   describe("normalizeClass", () => {
@@ -64,6 +83,12 @@ describe("Utils", () => {
       expect(normalizeClass(null)).toBe("");
       expect(normalizeClass(undefined)).toBe("");
       expect(normalizeClass(123)).toBe("123");
+    });
+
+    test("handles edge cases", () => {
+      expect(normalizeClass([["a", "b"], "c"])).toBe("a b c");
+      expect(normalizeClass(["a", false, "b", null, "c", undefined])).toBe("a b c");
+      expect(normalizeClass({ a: true, b: 1, c: 0 })).toBe("a b");
     });
   });
 
@@ -77,6 +102,21 @@ describe("Utils", () => {
       expect(normalizeStyle(undefined)).toBe("");
       expect(normalizeStyle("color: red;")).toBe("color: red;"); // Fixed expectation
     });
+
+    test("handles edge cases", () => {
+      expect(normalizeStyle({ 
+        fontSize: "14px", 
+        backgroundColor: "red" 
+      })).toBe("font-size:14px;background-color:red");
+      expect(normalizeStyle({ 
+        opacity: 0, 
+        zIndex: 1 
+      })).toBe("opacity:0;z-index:1");
+      expect(normalizeStyle({ 
+        marginTop: "10px",
+        paddingLeft: "5px"
+      })).toBe("margin-top:10px;padding-left:5px");
+    });
   });
 
   describe("unwrapExpr", () => {
@@ -87,6 +127,13 @@ describe("Utils", () => {
       expect(unwrapExpr(" { hello } ")).toBe("hello");
       expect(unwrapExpr("")).toBe("");
       expect(unwrapExpr(null as any)).toBe("");
+    });
+
+    test("handles edge cases", () => {
+      expect(unwrapExpr("{}")).toBe("");
+      expect(unwrapExpr("{{nested}}")).toBe("nested");
+      expect(unwrapExpr("  { expression }  ")).toBe("expression");
+      expect(unwrapExpr("plain expression")).toBe("plain expression");
     });
   });
 
@@ -173,6 +220,14 @@ describe("Utils", () => {
         idxKey: "idx"
       });
     });
+
+    test("handles edge cases", () => {
+      expect(parseEachExpression("getFilteredItems() as item, idx")).toEqual({
+        listExpr: "getFilteredItems()",
+        itemKey: "item",
+        idxKey: "idx"
+      });
+    });
   });
 
   describe("setBooleanProp", () => {
@@ -239,6 +294,33 @@ describe("Utils", () => {
       
       // Should not throw and should return empty props
       expect(() => parseProps(div)).not.toThrow();
+    });
+
+    test("handles edge cases", () => {
+      const div = document.createElement("div");
+      div.setAttribute("props", '{"invalid": json}');
+      
+      const props = parseProps(div);
+      expect(props).toEqual({});
+
+      // Test data and aria attributes
+      div.setAttribute("data-test", "value");
+      div.setAttribute("aria-label", "label");
+      
+      const props2 = parseProps(div);
+      expect(props2["data-test"]).toBe("value");
+      expect(props2["aria-label"]).toBe("label");
+
+      // Test mixed attribute types
+      const div2 = document.createElement("div");
+      div2.setAttribute("string-attr", "hello");
+      div2.setAttribute("number-attr", "42");
+      div2.setAttribute("boolean-attr", "true");
+      
+      const props3 = parseProps(div2);
+      expect(props3.stringAttr).toBe("hello");
+      expect(props3.numberAttr).toBe(42);
+      expect(props3.booleanAttr).toBe(true);
     });
   });
 

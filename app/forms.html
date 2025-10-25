@@ -102,7 +102,7 @@
         <div>
           <button type="button" class="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
                   onclick="submitted = true">Submit</button>
-          <span class="ml-2 text-sm { submitted ? '' : 'hidden' }">Submitted!</span>
+          <span class="ml-2 text-sm text-black { submitted ? 'inline' : 'hidden' }">Submitted!</span>
         </div>
       </form>
     </template>
@@ -121,7 +121,7 @@
           this.submitted = false
         }
         get stateJSON() {
-          return JSON.stringify({ name: this.name, bio: this.bio, agree: this.agree, plan: this.plan, country: this.country, age: this.age }, null, 2)
+          return JSON.stringify({ name: this.name, bio: this.bio, agree: this.agree, plan: this.plan, country: this.country, age: this.age, submitted: this.submitted }, null, 2)
         }
       }
     </script>

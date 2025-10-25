@@ -4,6 +4,7 @@ import { unwrapExpr } from './utils';
 const exprCache = new Map<string, Function>();
 const computedCache = new WeakMap<Element, Map<string, { value: any; deps: Set<string> }>>();
 const ctorCache = new Map<string, any>();
+let scriptContentCache: string | null = null;
 
 export function compile(expr: string): Function {
   let fn = exprCache.get(expr);
@@ -76,16 +77,18 @@ export function resolveCtor(name: string): any {
   // Check cache
   if (ctorCache.has(name)) return ctorCache.get(name);
   
-  // Search in script tags
+  // Search in script tags (cached for performance)
   try {
-    const scripts = Array.from(document.querySelectorAll('script')) as HTMLScriptElement[];
-    const code = scripts
-      .filter(s => !s.type || s.type === 'text/javascript')
-      .map(s => s.textContent || '')
-      .join('\n');
+    if (scriptContentCache === null) {
+      const scripts = Array.from(document.querySelectorAll('script')) as HTMLScriptElement[];
+      scriptContentCache = scripts
+        .filter(s => !s.type || s.type === 'text/javascript')
+        .map(s => s.textContent || '')
+        .join('\n');
+    }
     
     const found = new Function(
-      'return (function(){\n' + code + 
+      'return (function(){\n' + scriptContentCache + 
       `\n;try { return typeof ${name}==='function' ? ${name} : null } catch(_) { return null }\n})()`
     )();
     
@@ -95,6 +98,8 @@ export function resolveCtor(name: string): any {
     }
   } catch {}
   
+  // Cache the undefined result to avoid repeated searches
+  ctorCache.set(name, undefined);
   return undefined;
 }
 
@@ -105,7 +110,9 @@ export function invalidateComputedCache(root: Element): void {
 // Test helpers
 export function clearExpressionCache(): void {
   exprCache.clear();
+  // computedCache is a WeakMap and will be garbage collected automatically
   ctorCache.clear();
+  scriptContentCache = null;
 }
 
 export function getExpressionCacheSize(): number {
