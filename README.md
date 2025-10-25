@@ -1,76 +1,155 @@
 # Impetus
 
-Tiny template-and-attributes runtime for building interactive UI without a build step in HTML. Inspired by petite-vue and Alpine. Ships as an ESM bundle for the browser.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE) [![Runtime: Bun 1.3+](https://img.shields.io/badge/runtime-bun%201.3%2B-000)](https://bun.sh) [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6)](#)
 
-Highlights
-- Minimal API: attribute directives, text interpolation, simple components.
-- Reactive state via Proxies, scheduled microtask re-renders.
-- Works directly in static HTML; no VDOM.
-- Examples included under `app/` (tabs, list, todo, fetch, modal, select2, tooltip).
+_HTML-first reactivity. Zero build step._
 
-## Install / Dev
+Build reactive UI in plain HTML — no bundler required. Impetus is a tiny template-and-attributes runtime designed for speed and clarity. Ship a single ESM file and progressively enhance any page.
 
-```bash
-bun install
+## Table of Contents
+- [Example](#example)
+- [Key Benefits](#key-benefits)
+- [Why Impetus](#why-impetus)
+- [When to use Impetus](#when-to-use-impetus)
+- [When not to use Impetus](#when-not-to-use-impetus)
+- [Quick Start](#quick-start)
+- [Core Concepts](#core-concepts)
+- [Components API (use + template)](#components-api-use--template)
+- [Reactivity model](#reactivity-model)
+- [Architecture (runtime.ts)](#architecture-runtimets)
+- [Performance notes](#performance-notes)
+- [Build scripts](#build-scripts)
+- [Examples (open after build)](#examples-open-after-build)
+- [FAQ](#faq)
+- [Acknowledgements](#acknowledgements)
+- [Contributing](#contributing)
+- [License](#license)
 
-# Dev (Bun server + hot) for Node-side index.ts
-bun run dev
+## Example
 
-# One-off start
-bun run start
+```html
+<div scope='{"count": 0, "name": "Jane", "open": true}'>
+  Hello, {name}! Count is {count}.
 
-# Type-check
-bun run typecheck
+  <button onclick="count++">+</button>
+  <button onclick="count=Math.max(0,count-1)">-</button>
+
+  <input :value="name" />
+
+  <div @show="open" @transition="fade:150">Showing when open is true</div>
+  <button onclick="open=!open">Toggle</button>
+
+  <ul>
+    <template @each="[1,2,3] as n,i">
+      <li>Item {i}: {n}</li>
+    </template>
+  </ul>
+</div>
 ```
 
-## Browser bundle (playground)
+## Key Benefits
+- ⚡ Minimal API: directives, `{expr}` interpolation, simple components.
+- 🔁 Reactive by default: Proxy state, microtask-batched renders.
+- 🧩 Drop-in: static HTML, no VDOM, no compile step.
+- 🛠️ Practical DX: `$event`, outside-click, keyboard helpers.
+- 🧪 Confidence: tested core, examples in `app/`.
+ - 🌐 CDN-first: load from a CDN and start immediately.
 
-Build the browser ESM to `app/impetus.js` and serve `app/`:
+## Why Impetus?
+- **Zero-setup progressive enhancement.** Start with a static page and sprinkle behavior.
+- **Understandable mental model.** State is plain objects; templates are plain HTML.
+- **Fast enough by design.** Microtask-batched updates and per-root computed caching.
+- **Just enough components.** Opt-in class-based components with templates and lifecycle hooks.
 
-```bash
-bun run build:browser   # minified ESM -> app/impetus.js
-bun run serve           # local static server
+## When to use Impetus
+- You want to progressively enhance static pages without a build step.
+- You prefer HTML-first templates and inline expressions over heavy frameworks.
+- You need small, interactive widgets (forms, tabs, lists, modals) fast.
+- You value simple reactivity and minimal API surface.
+
+## When not to use Impetus
+- You need a full SPA router, SSR/SSG integration, or complex app state patterns out of the box.
+- You require a large ecosystem of plugins/components and tight framework tooling.
+- You’re building a large-scale SPA where a full framework provides clear advantages.
+
+## Quick Start
+
+### CDN (recommended)
+
+Add a single script tag (auto-init):
+
+```html
+<script type="module" src="https://cdn.jsdelivr.net/gh/softkittens/impetus@main/app/impetus.js" defer init></script>
 ```
 
-Watch-mode while editing `src/`:
+Or import explicitly:
 
-```bash
-bun run build:watch
-# in another terminal
-bun run serve
+```html
+<script type="module">
+  import { init } from 'https://cdn.jsdelivr.net/gh/softkittens/impetus@main/app/impetus.js'
+  init()
+  // or scope-only: init('[scope]')
+</script>
 ```
 
-### Devtools (optional)
+Note: Replace `@main` with a tagged release for stability when you publish one (e.g., `@v0.1.0`).
 
-Enable the in-page devtools chip during watch builds:
+### Local build
 
-```bash
-bun run build:watch --devtools
-# in another terminal
-bun run serve
-```
-
-Alternatively with an env var:
+1) Build the browser ESM bundle and serve the examples directory:
 
 ```bash
-WATCH_DEVTOOLS=1 bun run build:watch
+bun run build:browser   # emits app/impetus.js
+bun run serve           # serves ./app
 ```
 
-Devtools are conditionally loaded at build-time and are not included unless enabled.
+2) In your HTML, include the generated bundle and auto-init:
 
-Auto-init (one liner):
 ```html
 <script type="module" src="./impetus.js" defer init></script>
 ```
 
-Or explicit init:
+Or import and call `init()` manually:
+
 ```html
 <script type="module">
   import { init } from './impetus.js'
   init()
   // or scope-only: init('[scope]')
+  // or enable devtools in watch builds
 </script>
 ```
+
+If this helps you ship faster, consider starring the repo.
+
+### Minimal Example
+
+```html
+<div scope='{"count": 0, "name": "Jane", "open": true}'>
+  Hello, {name}! Count is {count}.
+
+  <button onclick="count++">+</button>
+  <button onclick="count=Math.max(0,count-1)">-</button>
+
+  <input :value="name" />
+
+  <div @show="open" @transition="fade:150">Showing when open is true</div>
+  <button onclick="open=!open">Toggle</button>
+
+  <ul>
+    <template @each="[1,2,3] as n,i">
+      <li>Item {i}: {n}</li>
+    </template>
+  </ul>
+</div>
+```
+
+### One‑Minute Examples
+- **Outside click + Escape:** use `$event.outside` and `$event.key==='Escape'` in inline handlers.
+- **Two‑way input:** `:value="path"` (events wired automatically).
+- **Conditional blocks:** `@if` / `@else` for DOM add/remove; `@show` for toggling visibility.
+- **Computed bits:** rely on expression caching within a render pass.
+
 
 ## Core Concepts
 
@@ -241,3 +320,40 @@ bun run serve
 ---
 
 This project was created with Bun v1.3+. See `app/` for examples and `src/runtime.ts` for the core runtime.
+
+## Acknowledgements
+
+Impetus draws inspiration from the simplicity and ergonomics of projects like petite-vue and Alpine.
+
+## Contributing
+
+Issues are welcome. At this time, pull requests are not being encouraged while the API stabilizes.
+
+If you want to run the project locally for experimentation:
+
+```bash
+bun install
+
+# Build browser bundle and serve examples
+bun run build:browser
+bun run serve
+
+# Dev (Bun server + hot) for Node-side index.ts
+bun run dev
+
+# Watch mode with optional devtools
+bun run build:watch
+# or enable devtools
+bun run build:watch --devtools
+# or via env var
+WATCH_DEVTOOLS=1 bun run build:watch
+
+# Type-check
+bun run typecheck
+```
+
+Devtools are conditionally loaded at build-time and are not included unless enabled.
+
+## License
+
+MIT License. See LICENSE file.
