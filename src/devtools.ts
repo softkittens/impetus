@@ -158,22 +158,16 @@ function bootstrapSparkleDevtoolsWithSparkle() {
                 <div @each="nodeBindings(selectedNode).attrs as b,bi" style="border:1px solid #374151;border-radius:6px;padding:4px;margin-top:4px;">
                   <div>{b.attr} = {b.expr}</div>
                   <div style="color:#9ca3af;">→ current: {currentAttr(b)}</div>
-                  <div style="margin-top:4px;color:#9ca3af;">
-                    deps:
-                    <span @each="deps(b.expr) as d,di" style="margin-right:6px;cursor:pointer;color:#93c5fd;" onclick="onJumpToKey(d)">{d}</span>
-                  </div>
+                  <div style="margin-top:4px;color:#9ca3af;">deps: {depsJoined(b.expr)}</div>
                 </div>
               </div>
               <div style="margin-top:6px;">
                 <div style="font-weight:600;">Text bindings</div>
                 <div @if="nodeBindings(selectedNode).interps.length===0" style="color:#9ca3af;">None</div>
                 <div @each="nodeBindings(selectedNode).interps as t,ti" style="border:1px solid #374151;border-radius:6px;padding:4px;margin-top:4px;">
-                  <div>{t.expr}</div>
+                  <div>{t.template}</div>
                   <div style="color:#9ca3af;">→ current: {currentText(t)}</div>
-                  <div style="margin-top:4px;color:#9ca3af;">
-                    deps:
-                    <span @each="deps(t.expr) as d,di" style="margin-right:6px;cursor:pointer;color:#93c5fd;" onclick="onJumpToKey(d)">{d}</span>
-                  </div>
+                  <div style="margin-top:4px;color:#9ca3af;">deps: {depsJoinedText(t.template)}</div>
                 </div>
               </div>
               <div style="margin-top:6px;">
@@ -257,14 +251,19 @@ function bootstrapSparkleDevtoolsWithSparkle() {
     _nodesWithBindings(): Element[] {
       const { attrs, interps } = this._bindingsAll();
       const set = new Set<Element>();
-      attrs.forEach((b:any)=> set.add(b.el));
-      interps.forEach((b:any)=> set.add(b.el));
+      attrs.forEach((b:any)=> { if (b?.el) set.add(b.el); });
+      interps.forEach((t:any)=> { const el = t?.node?.parentElement; if (el) set.add(el); });
       return Array.from(set);
     }
-    labelNode(n: Element) { return this._label(n); }
-    countAttr(n: Element) { return this._bindingsAll().attrs.filter((b:any)=> b.el===n).length }
-    countText(n: Element) { return this._bindingsAll().interps.filter((b:any)=> b.el===n).length }
-    nodeBindings(n: Element) { const all = this._bindingsAll(); return { attrs: all.attrs.filter((b:any)=> b.el===n), interps: all.interps.filter((b:any)=> b.el===n) } }
+    labelNode(n: Element | null | undefined) { try { return n ? this._label(n) : '(none)'; } catch { return '(unknown)'; } }
+    countAttr(n: Element) { return this._bindingsAll().attrs.filter((b:any)=> b && b.el===n).length }
+    countText(n: Element) { return this._bindingsAll().interps.filter((t:any)=> (t?.node?.parentElement)===n).length }
+    nodeBindings(n: Element) {
+      const all = this._bindingsAll();
+      const attrs = all.attrs.filter((b:any)=> b && b.el===n);
+      const interps = all.interps.filter((t:any)=> (t?.node?.parentElement)===n);
+      return { attrs, interps };
+    }
     get nodesFiltered() {
       const items = this._nodesWithBindings();
       const q = (this.filterText||'').toLowerCase();
@@ -284,13 +283,29 @@ function bootstrapSparkleDevtoolsWithSparkle() {
         const v = (b.el as Element).getAttribute(name); return v==null ? '' : String(v);
       } catch { return '' }
     }
-    currentText(t: any) { try { return String((t.el as Element).textContent || '') } catch { return '' } }
+    currentText(t: any) { try { return String((t?.node as Text)?.textContent || '') } catch { return '' } }
     deps(expr: string) {
       try {
         const stop = new Set(['true','false','null','undefined','NaN','Infinity','Math','Date','Array','Object','String','Number','Boolean','console','event','window','document']);
         const ids = Array.from(new Set((expr.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) || []).filter(x => !stop.has(x))));
         return ids.slice(0,8);
       } catch { return [] }
+    }
+    depsText(template: string) {
+      try {
+        const out = new Set<string>();
+        const re = /\{([^}]+)\}/g; let m: RegExpExecArray | null;
+        while ((m = re.exec(String(template))) !== null) {
+          const ids = this.deps(m[1] || ''); ids.forEach((id:string)=> out.add(id));
+        }
+        return Array.from(out).slice(0, 8);
+      } catch { return []; }
+    }
+    depsJoined(expr: string) {
+      try { return this.deps(expr).join(', '); } catch { return ''; }
+    }
+    depsJoinedText(template: string) {
+      try { return this.depsText(template).join(', '); } catch { return ''; }
     }
     onJumpToKey(key: string) {
       try {
@@ -332,6 +347,9 @@ function bootstrapSparkleDevtoolsWithSparkle() {
     }
     _rootsArr(): Element[] { const arr = __dev_get_roots(); return devtoolsHostEl ? arr.filter(r => r !== devtoolsHostEl) : arr }
     _label(r: Element): string {
+      if (!r || !(r as any).getAttribute) {
+        try { return (r as any)?.tagName ? String((r as any).tagName).toLowerCase() : '(node)'; } catch { return '(node)'; }
+      }
       const use = r.getAttribute && r.getAttribute('use');
       if (use && use.trim()) return `${use}`;
       const id = (r as HTMLElement).id ? `#${(r as HTMLElement).id}` : '';

@@ -513,6 +513,8 @@ function renderBindings(state: Scope, root: Element) {
       // no-op here; consumed by @show/@if handlers
       continue;
     }
+    // For non-directive attributes, skip if element is disconnected
+    try { if (!(b.el as any).isConnected) continue; } catch {}
     
     // Use consolidated handlers for special attributes
     const handler = attrHandlers[attrName];
@@ -779,10 +781,9 @@ function collectBindingsForRoot(root: Element) {
   const abinds: AttrBinding[] = [];
   const all = [root, ...Array.from(root.querySelectorAll("*"))] as Element[];
   all.forEach((el) => {
-    // If this element is inside an @each template holder, skip collecting here.
-    // The clone pass will collect bindings per repeated instance.
-    const isHolder = el.hasAttribute('s-each') || el.hasAttribute('@each');
-    if (!isHolder && isInsideEachTemplate(el)) {
+    // Skip collecting on any element that has an ancestor @each holder.
+    // The clone pass will collect bindings for each repeated instance.
+    if (isInsideEachTemplate(el)) {
       return;
     }
     const attrs = Array.from(el.attributes);
@@ -824,7 +825,9 @@ function collectBindingsForRoot(root: Element) {
     const textNode = node as Text;
     const parent = textNode.parentElement;
     
-    if (parent && !SKIP_TAGS.has(parent.tagName) && !isInsideEachTemplate(parent)) {
+    if (parent && !SKIP_TAGS.has(parent.tagName)
+        && !isInsideEachTemplate(parent)
+        && !(parent.hasAttribute('s-each') || parent.hasAttribute('@each'))) {
       if (textNode.nodeValue && /\{[^}]+\}/.test(textNode.nodeValue)) {
         textBindings.push({ node: textNode, template: textNode.nodeValue });
       }
@@ -836,7 +839,8 @@ function collectBindingsForRoot(root: Element) {
 }
 
 function isInsideEachTemplate(element: Element | null): boolean {
-  let current = element;
+  // Check only ancestors; the element itself is not considered "inside"
+  let current = element?.parentElement || null;
   while (current) {
     if (current.hasAttribute?.('s-each') || current.hasAttribute?.('@each')) {
       return true;
