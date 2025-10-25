@@ -2,7 +2,45 @@
 // - Registers runtime hooks and logs activity
 // - Adds overlay highlighter and a tiny panel (toggle: Alt+S / Alt+H)
 
-import { setDevtoolsHooks, __dev_get_roots, __dev_get_state, __dev_get_bindings, init } from './runtime';
+import type { DevtoolsHooks, Scope, AttrBinding, InterpBinding } from './types';
+import { stateManager } from './state';
+import { getAttributeBindings, getInterpolationBindings } from './bindings';
+
+// Lazy import to avoid circular dependency
+let initFn: (() => void) | null = null;
+async function getInit() {
+  if (!initFn) {
+    const mod = await import('./index');
+    initFn = mod.init;
+  }
+  return initFn;
+}
+
+let devhooks: DevtoolsHooks | undefined;
+
+export function setDevtoolsHooks(hooks: Partial<DevtoolsHooks>): void {
+  devhooks = Object.assign({}, devhooks, hooks);
+}
+
+export function getDevtoolsHooks(): DevtoolsHooks | undefined {
+  return devhooks;
+}
+
+// Dev inspector helpers (for devtools only)
+export function __dev_get_roots(): Element[] { 
+  return stateManager.getAllRoots();
+}
+
+export function __dev_get_state(root: Element): Scope | undefined { 
+  return stateManager.getRootState(root);
+}
+
+export function __dev_get_bindings(root: Element): { attrs: AttrBinding[]; interps: InterpBinding[] } {
+  return {
+    attrs: getAttributeBindings(root),
+    interps: getInterpolationBindings(root),
+  };
+}
 
 type RootStats = { renders: number; lastMs: number };
 const state: {
@@ -107,7 +145,7 @@ let devDesiredOpen = true;
 function getPanelState(): any {
   try { return panelRef || (devtoolsHostEl ? __dev_get_state(devtoolsHostEl) : null); } catch { return null; }
 }
-function bootstrapImpetusDevtoolsWithImpetus() {
+async function bootstrapImpetusDevtoolsWithImpetus() {
   if (impetusMounted) return; impetusMounted = true;
   // Template
   const tpl = document.createElement('template');
@@ -201,10 +239,10 @@ function bootstrapImpetusDevtoolsWithImpetus() {
   chip.textContent = '✨';
   chip.style.position = 'fixed'; chip.style.right = '12px'; chip.style.bottom = '12px'; chip.style.zIndex = '2147483647';
   chip.style.background = '#111827'; chip.style.color = '#e5e7eb'; chip.style.border = '1px solid #374151'; chip.style.borderRadius = '999px'; chip.style.padding = '8px 12px'; chip.style.cursor = 'pointer'; chip.style.fontSize = '20px';
-  chip.onclick = () => {
+  chip.onclick = async () => {
     devDesiredOpen = true;
     let p = getPanelState();
-    if (!p) { try { init(); panelRef = __dev_get_state(host) as any; } catch {} p = getPanelState(); }
+    if (!p) { try { (await getInit())(); panelRef = __dev_get_state(host) as any; } catch {} p = getPanelState(); }
     if (p) { p.open = true; p._pulse = (p._pulse || 0) + 1; }
   };
   document.body.appendChild(chip);
@@ -373,7 +411,7 @@ function bootstrapImpetusDevtoolsWithImpetus() {
     set roots(_v: any){}
   }
   // Mount impetus for this host only
-  try { init(); panelRef = __dev_get_state(host) as any; } catch {}
+  try { (await getInit())(); panelRef = __dev_get_state(host) as any; } catch {}
 }
 
 let panelRef: any = null;
