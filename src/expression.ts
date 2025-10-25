@@ -3,6 +3,7 @@ import { unwrapExpr } from './utils';
 
 const exprCache = new Map<string, Function>();
 const computedCache = new WeakMap<Element, Map<string, { value: any; deps: Set<string> }>>();
+const ctorCache = new Map<string, any>();
 
 export function compile(expr: string): Function {
   let fn = exprCache.get(expr);
@@ -71,7 +72,6 @@ export function assignInScope(path: string, state: Scope, value: any) {
 export function resolveCtor(name: string): any {
   const g = (globalThis as any)[name];
   if (typeof g === 'function') return g;
-  const ctorCache = new Map<string, any>();
   if (ctorCache.has(name)) return ctorCache.get(name);
   try {
     const scripts = Array.from(document.querySelectorAll('script')) as HTMLScriptElement[];
@@ -94,4 +94,14 @@ export function resolveCtor(name: string): any {
 
 export function invalidateComputedCache(root: Element): void {
   computedCache.delete(root);
+}
+
+// Test helpers
+export function clearExpressionCache(): void {
+  exprCache.clear();
+  ctorCache.clear();
+}
+
+export function getExpressionCacheSize(): number {
+  return exprCache.size;
 }

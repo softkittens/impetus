@@ -9,6 +9,7 @@ export class StateManager {
   private scheduled = new WeakSet<Element>();
   private rootStateMap = new WeakMap<Element, Scope>();
   private allRoots = new Set<Element>();
+  private renderCallbacks = new Set<(state: Scope, root: Element) => void>();
 
   scheduleRender(root: Element): void {
     if (this.scheduled.has(root)) return;
@@ -17,6 +18,14 @@ export class StateManager {
       this.scheduled.delete(root);
       const state = this.rootStateMap.get(root);
       if (state) {
+        // Call all registered render callbacks
+        this.renderCallbacks.forEach(callback => {
+          try {
+            callback(state, root);
+          } catch (e) {
+            console.warn('impetus: render callback error', e);
+          }
+        });
         // This will be injected to avoid circular dependency
         (this as any).renderBindings?.(state, root);
       }
@@ -47,8 +56,32 @@ export class StateManager {
     return this.scheduled.has(root) || this.rootStateMap.has(root);
   }
 
+  setRenderCallback(callback: (state: Scope, root: Element) => void): void {
+    this.renderCallbacks.add(callback);
+  }
+
+  removeRenderCallback(callback: (state: Scope, root: Element) => void): void {
+    this.renderCallbacks.delete(callback);
+  }
+
   markInitialized(root: Element): void {
     this.scheduled.add(root);
+  }
+
+  // Test helpers
+  clear(): void {
+    this.scheduled = new WeakSet();
+    this.rootStateMap = new WeakMap();
+    this.allRoots.clear();
+    this.renderCallbacks.clear();
+  }
+
+  getRootCount(): number {
+    return this.allRoots.size;
+  }
+
+  hasScheduledRender(root: Element): boolean {
+    return this.scheduled.has(root);
   }
 }
 
@@ -118,4 +151,13 @@ export function makeReactive<T extends object>(obj: T, root: Element, isRoot: bo
   // Register initial root
   proxyRoots.set(proxy, new Set<Element>([root]));
   return proxy as T;
+}
+
+// Test helpers
+export function isReactiveProxy(obj: any): boolean {
+  return reactiveProxies.has(obj);
+}
+
+export function getProxyRoots(proxy: object): Set<Element> {
+  return proxyRoots.get(proxy) || new Set();
 }
