@@ -4,8 +4,20 @@ const root = new URL("./app/", import.meta.url).pathname;
 
 // Optionally start bundler in watch mode
 if (process.env.SPARKLE_WATCH === '1') {
+  const enableDevtools = process.argv.includes('--devtools') || process.env.SPARKLE_DEVTOOLS === '1';
+  const cmd = [
+    "bun", "build", "src/index.ts",
+    "--outfile", "app/sparkle.js",
+    "--target", "browser",
+    "--format", "esm",
+    "--watch",
+  ];
+  if (enableDevtools) {
+    cmd.push("--define", "DEVTOOLS=true");
+    console.log("[dev] devtools enabled via --devtools");
+  }
   const child = spawn({
-    cmd: ["bun", "build", "src/index.ts", "--outfile", "app/sparkle.js", "--target", "browser", "--format", "esm", "--watch"],
+    cmd,
     stdout: "inherit",
     stderr: "inherit",
   });

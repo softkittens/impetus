@@ -619,6 +619,14 @@ function makeReactive<T extends object>(obj: T, root: Element, isRoot: boolean =
       }
       // Recurse only into plain objects and arrays; leave other instances (Date, Map, DOM, etc.) intact
       if (val && typeof val === 'object') {
+        // If this is already one of our reactive proxies, register this root
+        // so that updates to the shared proxy schedule re-renders here as well.
+        if (reactiveProxies.has(val as unknown as object)) {
+          const roots = proxyRoots.get(val as unknown as object) || new Set<Element>();
+          roots.add(root);
+          proxyRoots.set(val as unknown as object, roots);
+          return val;
+        }
         if (Array.isArray(val) || isPlainObject(val)) {
           return makeReactive(val as any, root, false);
         }
