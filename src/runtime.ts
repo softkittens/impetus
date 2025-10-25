@@ -6,10 +6,35 @@ type InterpBinding = { node: Text; template: string };
 const attrBindings = new WeakMap<Element, AttrBinding[]>();
 const interpBindings = new WeakMap<Element, InterpBinding[]>();
 const exprCache = new Map<string, Function>();
-const assignCache = new Map<string, Function>();
 const rootStateMap = new WeakMap<Element, Scope>();
 const scheduled = new WeakSet<Element>();
 const initialized = new WeakSet<Element>();
+const allRoots = new Set<Element>();
+
+// Devtools hooks (no-op in production unless set)
+type DevtoolsHooks = {
+  onInitRoot?: (root: Element, state: Scope) => void;
+  onCollect?: (root: Element, counts: { attrs: number; interps: number }) => void;
+  onRenderStart?: (root: Element) => void;
+  onRenderEnd?: (root: Element, stats: { duration: number }) => void;
+  onDirective?: (el: Element, type: string, meta?: any) => void;
+  onWireEvents?: (root: Element, count: number) => void;
+  onDestroy?: (root: Element) => void;
+};
+let devhooks: DevtoolsHooks | undefined;
+export function setDevtoolsHooks(hooks: Partial<DevtoolsHooks>) {
+  devhooks = Object.assign({}, devhooks, hooks);
+}
+
+// Dev inspector helpers (for devtools only)
+export function __dev_get_roots(): Element[] { return Array.from(allRoots); }
+export function __dev_get_state(root: Element): Scope | undefined { return rootStateMap.get(root); }
+export function __dev_get_bindings(root: Element): { attrs: AttrBinding[]; interps: InterpBinding[] } {
+  return {
+    attrs: (attrBindings.get(root) || []).slice(),
+    interps: (interpBindings.get(root) || []).slice(),
+  };
+}
 const reactiveCache = new WeakMap<object, any>();
 const reactiveProxies = new WeakSet<object>();
 const proxyRoots = new WeakMap<object, Set<Element>>();
@@ -457,6 +482,8 @@ function handleEachDirective(el: Element, expr: string, state: Scope, root: Elem
 }
 
 function renderBindings(state: Scope, root: Element) {
+  const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+  try { devhooks?.onRenderStart?.(root); } catch {}
   const alist = attrBindings.get(root) || [];
   for (const b of alist) {
     const raw = b.expr || "";
@@ -465,10 +492,12 @@ function renderBindings(state: Scope, root: Element) {
     
     // Directives
     if (DIRECTIVES.IF.has(attrName)) {
+      try { devhooks?.onDirective?.(b.el, '@if', { expr }); } catch {}
       handleIfDirective(b.el, expr, state);
       continue;
     }
     if (DIRECTIVES.SHOW.has(attrName)) {
+      try { devhooks?.onDirective?.(b.el, '@show', { expr }); } catch {}
       handleShowDirective(b.el, expr, state);
       continue;
     }
@@ -476,6 +505,7 @@ function renderBindings(state: Scope, root: Element) {
       continue; // Handled by @if
     }
     if (DIRECTIVES.EACH.has(attrName)) {
+      try { devhooks?.onDirective?.(b.el, '@each', { expr }); } catch {}
       handleEachDirective(b.el, expr, state, root);
       continue;
     }
@@ -530,6 +560,8 @@ function renderBindings(state: Scope, root: Element) {
     }
   }
 
+  const t1 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+  try { devhooks?.onRenderEnd?.(root, { duration: t1 && t0 ? (t1 - t0) : 0 }); } catch {}
   const ilist = interpBindings.get(root) || [];
   for (const b of ilist) {
     // Support escaping with double braces {{ and }} to output literal braces
@@ -697,6 +729,8 @@ function mountComponent(host: Element, className: string, inherit: boolean): voi
   const reactive = makeReactive(instance, host, true);
   rootStateMap.set(host, reactive);
   if (!inherit) componentInstance.set(host, instance);
+  try { devhooks?.onInitRoot?.(host, reactive); } catch {}
+  try { allRoots.add(host); } catch {}
   collectBindingsForRoot(host);
   renderBindings(reactive, host);
   wireEventHandlers(host, reactive);
@@ -790,6 +824,7 @@ function collectBindingsForRoot(root: Element) {
     node = walker.nextNode();
   }
   interpBindings.set(root, textBindings);
+  try { devhooks?.onCollect?.(root, { attrs: abinds.length, interps: textBindings.length }); } catch {}
 }
 
 function isInsideEachTemplate(element: Element | null): boolean {
@@ -882,6 +917,7 @@ function wireEventHandlers(root: Element, state: Scope) {
     }
   });
   if (listeners.length) listenerMap.set(root, listeners);
+  try { devhooks?.onWireEvents?.(root, listeners.length); } catch {}
 }
 
 /*
@@ -912,6 +948,8 @@ function setupScope(root: Element) {
   const state = makeReactive(initial, root, true);
   rootStateMap.set(root, state);
   try { (state as any).$store = makeReactive((globalThis as any).__sparkleStore || ((globalThis as any).__sparkleStore = {}), root); } catch {}
+  try { devhooks?.onInitRoot?.(root, state); } catch {}
+  try { allRoots.add(root); } catch {}
 
   collectBindingsForRoot(root);
 
@@ -979,6 +1017,8 @@ export function destroy(root: Element) {
   scheduled.delete(root);
   initialized.delete(root);
   try { (componentInstance.get(root) as any)?.onDestroy?.() } catch {}
+  try { devhooks?.onDestroy?.(root); } catch {}
+  try { allRoots.delete(root); } catch {}
 }
 
 // Simple transitions (fade[:durationMs]) applied by @show/@transition

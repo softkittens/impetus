@@ -1,6 +1,16 @@
-import { serve } from "bun";
+import { serve, spawn } from "bun";
 
 const root = new URL("./app/", import.meta.url).pathname;
+
+// Optionally start bundler in watch mode
+if (process.env.SPARKLE_WATCH === '1') {
+  const child = spawn({
+    cmd: ["bun", "build", "src/index.ts", "--outfile", "app/sparkle.js", "--target", "browser", "--format", "esm", "--watch"],
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  console.log("[dev] build:watch started (pid:", child.pid, ")");
+}
 
 serve({
   port: 5173,
