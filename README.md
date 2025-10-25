@@ -26,7 +26,8 @@ A tiny HTML-first runtime that turns static pages into interactive UI. Load from
 
 ## Table of Contents
 - [Example](#example)
-- [Component Example](#component-example)
+- [Inline Component Example](#inline-component-example)
+- [Component Example](#component-example-using-template)
 - [Key Benefits](#key-benefits)
 - [Quick Syntax](#quick-syntax)
 - [Why Impetus](#why-impetus)
@@ -71,11 +72,30 @@ A tiny HTML-first runtime that turns static pages into interactive UI. Load from
 </div>
 ```
 
-## Component Example
+### Inline Component Example
+
+```html
+<!-- Inline component uses its own content as the template -->
+<div use="Counter">
+  <p>Count: {count}</p>
+  <button onclick="inc()">+</button>
+  <button onclick="dec()">-</button>
+  <button onclick="count = 0">reset</button>
+</div>
+<script>
+  class Counter {
+    count = 0
+    inc() { this.count++ }
+    dec() { this.count-- }
+  }
+</script>
+```
+
+## Component Example (Using template)
 
 ```html
 <!-- Component host (the "component") -->
-<div use="Counter" max="5"></div>
+<div use="Counter" template="counter" max="5"></div>
 
 <!-- Template (can be anywhere on the page) -->
 <template id="counter">
@@ -89,7 +109,7 @@ A tiny HTML-first runtime that turns static pages into interactive UI. Load from
 </template>
 
 <!-- Class definition (can live anywhere; CDN auto‑init will find it) -->
-<script type="module">
+<script>
   class Counter {
     static template = 'counter'
     constructor(props={}) {
@@ -268,37 +288,86 @@ Two-way model (shorthand)
 
 ## Components API (use + template)
 
-Attach a class and optionally a template id.
+Attach a class and optionally a template id. Three template patterns are supported:
+
+### 1. Inline Templates
+Use the element's own content as the template - no separate template needed:
+
+```html
+<div use="Counter" class="p-4 border rounded">
+  <h3>Inline Counter</h3>
+  <div>Count: {count}</div>
+  <button onclick="inc()">+</button>
+  <button onclick="dec()">-</button>
+</div>
+
+<script>
+  class Counter {
+    count = 0
+    inc() { this.count++ }
+    dec() { this.count-- }
+  }
+</script>
+```
+
+### 2. Template ID as Prop
+Pass template ID via prop for reusable components:
+
+```html
+<template id="card">
+  <div class="card">{title}</div>
+</template>
+
+<div use="Card" template="card" title="Hello"></div>
+
+<script>
+  class Card {
+    // No static template needed - receives via prop
+    constructor(props) {
+      this.title = props.title
+    }
+  }
+</script>
+```
+
+### 3. Traditional Template Reference
+Original pattern with static template or template attribute:
 
 ```html
 <template id="counter">
   <div>Count: {count}</div>
   <button onclick="inc()">+</button>
   <button onclick="dec()">-</button>
-  <div class="text-xs text-gray-500">Max: {max}</div>
- </template>
+</template>
 
 <div use="Counter" template="counter" max="5"></div>
 
 <script>
   class Counter {
-    static template = 'counter'
+    static template = 'counter'  // Optional - template attribute takes precedence
     constructor(props={}) {
       this.count = 0
       this.max = props.max ?? 10
     }
     inc() { if (this.count < this.max) this.count++ }
     dec() { if (this.count > 0) this.count-- }
-    onMount() {}
-    onDestroy() {}
   }
 </script>
 ```
 
-Notes
-- Props come from `props='{...}'` JSON plus any other attributes (coerced to booleans/numbers when possible).
-- If `inherit` attribute is present, the component uses the nearest parent scope instance instead of constructing a new one.
-- Templates resolve in order: host `template` attr → `Class.template` → `instance.template`.
+### Template Resolution Priority
+Templates resolve in order:
+1. Host `template` attribute (highest priority)
+2. **Inline content** (NEW - uses host element content as template)
+3. Template ID from props (NEW - `template="id"` prop)
+4. Static `Class.template` property
+5. Instance `this.template` property (lowest priority)
+
+### Props and Attributes
+- Props come from `props='{...}'` JSON plus any other attributes (coerced to booleans/numbers when possible)
+- `data-*` and `aria-*` attributes keep their original names (e.g., `data-test` → `data-test`)
+- Other attributes are converted to camelCase (e.g., `max-items` → `maxItems`)
+- If `inherit` attribute is present, the component uses the nearest parent scope instance instead of constructing a new one
 
 ### Template anchors
 
@@ -367,6 +436,7 @@ bun run serve
 ## Examples (open after build)
 
 - `/counter.html` – basic component API, props.
+- `/inline-components.html` – inline templates, template props, reusable components.
 - `/list.html` – search + filter, `@if/@else`, `@each`.
 - `/tabs.html` – accessible tabs: keyboard (arrow/home/end), `@each`, ARIA.
 - `/todo.html` – add/toggle/delete, filters, computed counts.

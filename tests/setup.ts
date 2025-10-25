@@ -26,7 +26,6 @@ import { expect, test, describe, beforeEach, afterEach, beforeAll, afterAll, spy
  */
 class MockElement {
   tagName: string;
-  attributes: Array<{ name: string; value: string }> = [];
   children: MockElement[] = [];
   parentNode: MockElement | null = null;
   nextSibling: MockElement | null = null;
@@ -38,11 +37,26 @@ class MockElement {
   style: Record<string, string> = {};
   hidden = false;
   value = '';
+  innerHTML = '';
+  firstChild: MockElement | null = null;
+  className = '';
   classList = {
     add: () => {},
     remove: () => {},
     contains: () => false,
   };
+
+  // Private attributes storage
+  private _attributes: Array<{ name: string; value: string }> = [];
+  
+  // Add getter for attributes property to support Array.from(host.attributes)
+  get attributes(): Array<{ name: string; value: string }> {
+    return this._attributes;
+  }
+  
+  set attributes(attrs: Array<{ name: string; value: string }>) {
+    this._attributes = attrs;
+  }
 
   /**
    * Create a new mock element
@@ -115,6 +129,11 @@ class MockElement {
     this.children.push(child);
     child.parentNode = this;
     child.parentElement = this;
+    
+    // Set firstChild if this is the first child
+    if (this.children.length === 1) {
+      this.firstChild = child;
+    }
     
     // Set up sibling relationships
     // This ensures nextSibling and nextElementSibling work correctly
@@ -213,10 +232,18 @@ class MockElement {
   /**
    * Mock implementation of querySelector
    * 
-   * Returns null since our mock doesn't implement
-   * CSS selector parsing. This is sufficient for current tests.
+   * Returns elements with matching class names for basic functionality
    */
-  querySelector(): MockElement | null {
+  querySelector(selector: string): MockElement | null {
+    // Simple class selector support
+    if (selector.startsWith('.')) {
+      const className = selector.slice(1);
+      for (const child of this.children) {
+        if (child.className === className) {
+          return child;
+        }
+      }
+    }
     return null;
   }
 
@@ -289,9 +316,43 @@ class MockComment {
 if (typeof document === 'undefined') {
   // Mock the document object with basic DOM creation methods
   global.document = {
-    createElement: (tag: string) => new MockElement(tag),
+    createElement: (tag: string) => {
+      const element = new MockElement(tag);
+      if (tag === 'template') {
+        (element as any).content = {
+          children: [],
+          appendChild: (child: any) => {
+            (element as any).content.children.push(child);
+          },
+          cloneNode: () => new MockElement('div')
+        };
+      }
+      return element;
+    },
     createTextNode: (text: string) => new MockText(text),
     createComment: (text: string) => new MockComment(text),
+    createDocumentFragment: () => new MockElement('div'), // Simple mock
+    getElementById: (id: string) => {
+      // Simple mock that returns a template element if id matches
+      if (id === 'prop-template' || id === 'priority-template') {
+        const template = new MockElement('template') as any;
+        template.id = id;
+        template.tagName = 'TEMPLATE';
+        template.content = {
+          children: [],
+          appendChild: (child: any) => {
+            template.content.children.push(child);
+          },
+          cloneNode: () => {
+            const div = new MockElement('div');
+            div.className = 'from-attribute';
+            return div;
+          }
+        };
+        return template;
+      }
+      return null;
+    },
     querySelectorAll: () => [],
     querySelector: () => null,
     body: { appendChild: () => {} },

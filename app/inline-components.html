@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inline Components Example - Impetus</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-8 bg-gray-50">
+  <div class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold text-gray-900 mb-8">Inline Components Example</h1>
+    
+    <!-- Example 1: Inline Template Component -->
+    <div class="mb-8">
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">1. Inline Template Component</h2>
+      <p class="text-gray-600 mb-4">Component uses its own content as template (no separate template needed):</p>
+      
+      <div use="Counter" class="bg-white p-6 rounded-lg shadow-md">
+        <div class="text-center">
+          <h3 class="text-lg font-medium text-gray-900 mb-4">Inline Counter</h3>
+          <p class="text-2xl font-bold text-blue-600 mb-4">Count: {count}</p>
+          <div class="space-x-2">
+            <button onclick="dec()" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
+              Decrease
+            </button>
+            <button onclick="inc()" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">
+              Increase
+            </button>
+            <button onclick="reset()" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
+              Reset
+            </button>
+          </div>
+          <p class="text-sm text-gray-500 mt-4">This component uses its own HTML content as the template</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Example 2: Template ID as Prop -->
+    <div class="mb-8">
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">2. Template ID as Prop</h2>
+      <p class="text-gray-600 mb-4">Component receives template ID via prop (new pattern):</p>
+      
+      <div use="Card" template="card-template" class="bg-white p-6 rounded-lg shadow-md">
+        <!-- Content will be replaced by template -->
+      </div>
+    </div>
+
+    <!-- Example 3: Reusable Component with Different Templates -->
+    <div class="mb-8">
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">3. Reusable Component with Different Templates</h2>
+      <p class="text-gray-600 mb-4">Same component class, different templates via props:</p>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div use="Widget" template="widget-template-a" class="bg-white p-6 rounded-lg shadow-md">
+          <!-- Will use widget-template-a -->
+        </div>
+        <div use="Widget" template="widget-template-b" class="bg-white p-6 rounded-lg shadow-md">
+          <!-- Will use widget-template-b -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Example 4: Component with Props -->
+    <div class="mb-8">
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">4. Component with Props</h2>
+      <p class="text-gray-600 mb-4">Component receiving data via attributes:</p>
+      
+      <div use="Greeter" 
+           data-name="Alice" 
+           data-role="Developer" 
+           template="greeter-template" 
+           class="bg-white p-6 rounded-lg shadow-md">
+        <!-- Will use greeter-template with props -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Templates -->
+  <template id="card-template">
+    <div class="border-2 border-blue-200 rounded-lg p-4">
+      <h3 class="text-lg font-semibold text-blue-900 mb-2">Card Component</h3>
+      <p class="text-gray-700 mb-4">This content comes from a template referenced via prop.</p>
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-gray-500">Template ID: card-template</span>
+        <button onclick="alert('Card clicked!')" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">
+          Action
+        </button>
+      </div>
+    </div>
+  </template>
+
+  <template id="widget-template-a">
+    <div class="text-center">
+      <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+      </div>
+      <h3 class="text-lg font-semibold text-green-900">Success Widget</h3>
+      <p class="text-gray-600 text-sm mt-2">Template A loaded successfully</p>
+    </div>
+  </template>
+
+  <template id="widget-template-b">
+    <div class="text-center">
+      <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+        </svg>
+      </div>
+      <h3 class="text-lg font-semibold text-purple-900">Power Widget</h3>
+      <p class="text-gray-600 text-sm mt-2">Template B loaded with power</p>
+    </div>
+  </template>
+
+  <template id="greeter-template">
+    <div class="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg p-6 text-white">
+      <h3 class="text-xl font-bold mb-2">Hello, {name}!</h3>
+      <p class="text-indigo-100">Role: {role}</p>
+      <p class="text-sm text-indigo-200 mt-4">Props passed via data- attributes</p>
+    </div>
+  </template>
+
+  <script>
+    // Component definitions
+    class Counter {
+      count = 0;
+      
+      inc() {
+        this.count++;
+      }
+      
+      dec() {
+        this.count--;
+      }
+      
+      reset() {
+        this.count = 0;
+      }
+    }
+
+    class Card {
+      title = "Dynamic Card";
+      
+      onMount() {
+        console.log('Card component mounted');
+      }
+    }
+
+    class Widget {
+      type = "reusable";
+      
+      onMount() {
+        console.log('Widget component mounted');
+      }
+    }
+
+    class Greeter {
+      // Props will be passed from attributes
+      constructor(props) {
+        Object.assign(this, props);
+        this.name = props["data-name"] ?? props.name ?? this.name;
+        this.role = props["data-role"] ?? props.role ?? this.role;
+      }
+    }
+
+    // Make components available globally
+    window.Counter = Counter;
+    window.Card = Card;
+    window.Widget = Widget;
+    window.Greeter = Greeter;
+  </script>
+
+  <script type="module" src="./impetus.js" defer init></script>
+</body>
+</html>

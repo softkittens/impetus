@@ -180,26 +180,59 @@ export function mountComponent(host: Element, className: string, inherit: boolea
  * 
  * WHY: Templates separate structure from behavior
  * They allow components to have reusable HTML layouts
+ * 
+ * NEW: Supports inline templates - using host element content as template
  */
 function resolveTemplate(host: Element, ctor: any, instance: any): void {
   // Check for template in order of precedence:
   // 1. Host element attribute (highest priority)
-  // 2. Static class property
-  // 3. Instance property (lowest priority)
+  // 2. Inline template (use host element's content as template)
+  // 3. Template id passed as prop
+  // 4. Static class property (deprecated)
+  // 5. Instance property (deprecated)
   const hostTpl = host.getAttribute('template');
-  const staticTpl = (ctor as any).template;
-  const instTpl = instance?.template;
-  const tplId = hostTpl || staticTpl || instTpl;
   
-  if (tplId) {
-    // Find the template element by ID
-    const tplEl = document.getElementById(String(tplId)) as HTMLTemplateElement | null;
+  if (hostTpl) {
+    // Traditional template reference by ID
+    const tplEl = document.getElementById(String(hostTpl)) as HTMLTemplateElement | null;
     if (tplEl && tplEl.tagName === 'TEMPLATE') {
-      // Clear existing content and clone template content
       host.innerHTML = '';
       host.appendChild(tplEl.content.cloneNode(true));
     } else {
-      console.warn('impetus: template id not found', tplId);
+      console.warn('impetus: template id not found', hostTpl);
+    }
+  } else if (host.children.length > 0 || host.innerHTML.trim() !== '') {
+    // NEW: Use host element's content as inline template
+    // Don't clone the content - just use it as-is to preserve event handlers
+    // The content will be processed by wireEventHandlers after the component is initialized
+  } else {
+    // Check for template id passed as prop (new pattern)
+    const props = parseProps(host);
+    const tplId = props.template;
+    
+    if (tplId) {
+      const tplEl = document.getElementById(String(tplId)) as HTMLTemplateElement | null;
+      if (tplEl && tplEl.tagName === 'TEMPLATE') {
+        host.innerHTML = '';
+        host.appendChild(tplEl.content.cloneNode(true));
+      } else {
+        console.warn('impetus: template id from props not found', tplId);
+      }
+    } else {
+      // Fallback to static/instance properties (deprecated)
+      const staticTpl = (ctor as any).template;
+      const instTpl = instance?.template;
+      const fallbackTplId = staticTpl || instTpl;
+      
+      if (fallbackTplId) {
+        const tplEl = document.getElementById(String(fallbackTplId)) as HTMLTemplateElement | null;
+        if (tplEl && tplEl.tagName === 'TEMPLATE') {
+          host.innerHTML = '';
+          host.appendChild(tplEl.content.cloneNode(true));
+        } else {
+          console.warn('impetus: template id not found', fallbackTplId);
+        }
+      }
     }
   }
 }
