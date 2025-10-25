@@ -51,14 +51,18 @@ A tiny HTML-first runtime that turns static pages into interactive UI. Load from
 <div scope='{"count": 0, "name": "Jane", "open": true}'>
   Hello, {name}! Count is {count}.
 
+  <!-- Simple expressions -->
   <button onclick="count++">+</button>
   <button onclick="count=Math.max(0,count-1)">-</button>
 
+  <!-- Two-way binding -->
   <input :value="name" />
 
+  <!-- Conditional display -->
   <div @show="open" @transition="fade:150">Showing when open is true</div>
   <button onclick="open=!open">Toggle</button>
 
+  <!-- Lists -->
   <ul>
     <template @each="[1,2,3] as n,i">
       <li>Item {i}: {n}</li>
@@ -76,9 +80,12 @@ A tiny HTML-first runtime that turns static pages into interactive UI. Load from
 <!-- Template (can be anywhere on the page) -->
 <template id="counter">
   <div>Count: {count}</div>
+
+  <!-- Events -->
   <button onclick="inc()">+</button>
   <button onclick="dec()">-</button>
-  <div class="text-xs text-gray-500">Max: {max}</div>
+
+  <div class="text-xs text-gray-500" >Max: {max}</div>
 </template>
 
 <!-- Class definition (can live anywhere; CDN auto‑init will find it) -->
