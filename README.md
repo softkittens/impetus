@@ -1,9 +1,9 @@
-# Impetus
+# Impetus - your new JavaScript companion
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE) [![Runtime: Bun 1.3+](https://img.shields.io/badge/runtime-bun%201.3%2B-000)](https://bun.sh) [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6)](#)
 
 
-# One line. Reactive UI.
+## One line. Reactive UI.
 
 A tiny HTML-first runtime that turns static pages into interactive UI. Load from a CDN and ship.
 
