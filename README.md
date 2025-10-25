@@ -1,4 +1,4 @@
-# Sparkle
+# Impetus
 
 Tiny template-and-attributes runtime for building interactive UI without a build step in HTML. Inspired by petite-vue and Alpine. Ships as an ESM bundle for the browser.
 
@@ -25,10 +25,10 @@ bun run typecheck
 
 ## Browser bundle (playground)
 
-Build the browser ESM to `app/sparkle.js` and serve `app/`:
+Build the browser ESM to `app/impetus.js` and serve `app/`:
 
 ```bash
-bun run build:browser   # minified ESM -> app/sparkle.js
+bun run build:browser   # minified ESM -> app/impetus.js
 bun run serve           # local static server
 ```
 
@@ -53,20 +53,20 @@ bun run serve
 Alternatively with an env var:
 
 ```bash
-SPARKLE_DEVTOOLS=1 bun run build:watch
+WATCH_DEVTOOLS=1 bun run build:watch
 ```
 
 Devtools are conditionally loaded at build-time and are not included unless enabled.
 
 Auto-init (one liner):
 ```html
-<script type="module" src="./sparkle.js" defer init></script>
+<script type="module" src="./impetus.js" defer init></script>
 ```
 
 Or explicit init:
 ```html
 <script type="module">
-  import { init } from './sparkle.js'
+  import { init } from './impetus.js'
   init()
   // or scope-only: init('[scope]')
 </script>
@@ -163,7 +163,7 @@ Mount a `<template>` by placing a `template="id"` attribute on an element:
 <section template="card"></section>
 ```
 
-At mount time, Sparkle replaces the element’s contents with the cloned template and removes the `template` attribute to avoid re-processing.
+At mount time, Impetus replaces the element’s contents with the cloned template and removes the `template` attribute to avoid re-processing.
 
 ## Reactivity model
 
@@ -196,7 +196,7 @@ Global store
 - Renders are microtask-batched per root (WeakSet guard).
 - `@each` respects array identity; preserves order via moving anchor.
 - Prefer `@show` for transient states (loading) to avoid DOM churn.
-- Use computed-like getters for filtered views; Sparkle caches expr results per render.
+- Use computed-like getters for filtered views; Impetus caches expr results per render.
 - Production build strips dev-only heuristics (e.g., heavy ctor resolution) via minification.
 
 ## Build scripts
@@ -230,7 +230,7 @@ bun run serve
 ## FAQ
 
 - How to initialize automatically?
-  Use `<script type="module" src="./sparkle.js" defer init></script>`.
+  Use `<script type="module" src="./impetus.js" defer init></script>`.
 
 - When to use `@show` vs `@if`?
   `@show` toggles visibility without DOM changes; `@if` mounts/unmounts.

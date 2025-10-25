@@ -3,11 +3,11 @@ import { serve, spawn } from "bun";
 const root = new URL("./app/", import.meta.url).pathname;
 
 // Optionally start bundler in watch mode
-if (process.env.SPARKLE_WATCH === '1') {
-  const enableDevtools = process.argv.includes('--devtools') || process.env.SPARKLE_DEVTOOLS === '1';
+if (process.env.WATCH === '1') {
+  const enableDevtools = process.argv.includes('--devtools') || process.env.DEVTOOLS === '1';
   const cmd = [
     "bun", "build", "src/index.ts",
-    "--outfile", "app/sparkle.js",
+    "--outfile", "app/impetus.js",
     "--target", "browser",
     "--format", "esm",
     "--watch",

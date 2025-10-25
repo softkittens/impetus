@@ -1,5 +1,5 @@
 {
-  "name": "sparkle",
+  "name": "impetus",
   "module": "index.ts",
   "type": "module",
   "private": true,
@@ -7,10 +7,10 @@
     "dev": "bun --hot index.ts",
     "start": "bun index.ts",
     "build": "bun build index.ts --outdir dist --target bun",
-    "build:browser": "bun build src/index.ts --outfile app/sparkle.js --target browser --format esm --minify",
-    "build:watch": "SPARKLE_WATCH=1 bun serve.ts",
+    "build:browser": "bun build src/index.ts --outfile app/impetus.js --target browser --format esm --minify",
+    "build:watch": "WATCH=1 bun serve.ts",
     "serve": "bun serve.ts",
-    "dev:watch": "SPARKLE_WATCH=1 bun serve.ts",
+    "dev:watch": "WATCH=1 bun serve.ts",
     "test": "bun test",
     "typecheck": "bunx tsc -p tsconfig.json --noEmit"
   },

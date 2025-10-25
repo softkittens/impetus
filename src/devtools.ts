@@ -1,4 +1,4 @@
-// Minimal Sparkle devtools (Phase 1.5)
+// Minimal Impetus devtools (Phase 1.5)
 // - Registers runtime hooks and logs activity
 // - Adds overlay highlighter and a tiny panel (toggle: Alt+S / Alt+H)
 
@@ -45,7 +45,7 @@ function highlight(el: Element | null) {
   o.style.height = `${r.height}px`;
 }
 
-// Hooks (update Sparkle panel state)
+// Hooks (update Impetus panel state)
 setDevtoolsHooks({
   onInitRoot(root) {
     if (root === devtoolsHostEl) return;
@@ -76,7 +76,7 @@ setDevtoolsHooks({
   },
 });
 
-console.info('[sparkle:devtools] panel ready (click chip to toggle)');
+console.info('[impetus:devtools] panel ready (click chip to toggle)');
 
 // (Picker removed) Rely on dropdown to change roots
 
@@ -99,23 +99,23 @@ function pushEvent(el: Element, type: string) {
 });
 
 //
-// Sparkle-driven Devtools Panel (component + template)
+// Impetus-driven Devtools Panel (component + template)
 //
-let sparkMounted = false;
+let impetusMounted = false;
 let devtoolsHostEl: Element | null = null;
 let devDesiredOpen = true;
 function getPanelState(): any {
   try { return panelRef || (devtoolsHostEl ? __dev_get_state(devtoolsHostEl) : null); } catch { return null; }
 }
-function bootstrapSparkleDevtoolsWithSparkle() {
-  if (sparkMounted) return; sparkMounted = true;
+function bootstrapImpetusDevtoolsWithImpetus() {
+  if (impetusMounted) return; impetusMounted = true;
   // Template
   const tpl = document.createElement('template');
-  tpl.id = 'sparkle-devtools';
+  tpl.id = 'impetus-devtools';
   tpl.innerHTML = `
   <div @if="open" style="position:fixed;right:12px;bottom:64px;z-index:2147483647;min-width:240px;max-width:360px;background:rgba(17,24,39,0.96);color:#e5e7eb;border:1px solid #374151;border-radius:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);padding:8px 10px;">
     <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
-      <div style="font-weight:600;">Sparkle Dev</div>
+      <div style="font-weight:600;">Impetus Dev</div>
       <div style="display:flex;gap:6px;align-items:center;">
         <button style="background:#111827;color:#9ca3af;border:1px solid #374151;border-radius:6px;padding:2px 6px;cursor:pointer;" onclick="onClose()">×</button>
       </div>
@@ -182,7 +182,7 @@ function bootstrapSparkleDevtoolsWithSparkle() {
       </div>
       <div @if="tab==='state'">
         <div style="font-weight:600;">State (auto-apply)</div>
-        <textarea id="sparkle-dev-state" oninput="onEdit($event)" onfocus="onStartEdit()" onblur="onStopEdit()" style="width:100%;height:200px;background:#111827;border:1px solid #374151;color:#e5e7eb;border-radius:6px;padding:6px;font-family:monospace;font-size:11px;">{stateText}</textarea>
+        <textarea id="impetus-dev-state" oninput="onEdit($event)" onfocus="onStartEdit()" onblur="onStopEdit()" style="width:100%;height:200px;background:#111827;border:1px solid #374151;color:#e5e7eb;border-radius:6px;padding:6px;font-family:monospace;font-size:11px;">{stateText}</textarea>
       </div>
       
     </div>
@@ -194,7 +194,7 @@ function bootstrapSparkleDevtoolsWithSparkle() {
   document.body.appendChild(tpl);
   // Host + chip
   const host = document.createElement('div');
-  host.setAttribute('use', 'DevPanel'); host.setAttribute('template', 'sparkle-devtools');
+  host.setAttribute('use', 'DevPanel'); host.setAttribute('template', 'impetus-devtools');
   document.body.appendChild(host);
   devtoolsHostEl = host;
   const chip = document.createElement('div');
@@ -211,7 +211,7 @@ function bootstrapSparkleDevtoolsWithSparkle() {
 
   // Component
   (globalThis as any).DevPanel = class DevPanel {
-    static template = 'sparkle-devtools';
+    static template = 'impetus-devtools';
     open: boolean = true;
     // always-on devtools
     tab: string = 'state';
@@ -226,7 +226,7 @@ function bootstrapSparkleDevtoolsWithSparkle() {
     lastMsVal: number = 0;
     _syncTextarea() {
       try {
-        const ta = document.querySelector('#sparkle-dev-state') as HTMLTextAreaElement | null;
+        const ta = document.querySelector('#impetus-dev-state') as HTMLTextAreaElement | null;
         if (ta && !this._editing) {
           const isActive = document.activeElement === ta;
           const selStart = ta.selectionStart ?? 0;
@@ -309,7 +309,7 @@ function bootstrapSparkleDevtoolsWithSparkle() {
     }
     onJumpToKey(key: string) {
       try {
-        const ta = document.querySelector('#sparkle-dev-state') as HTMLTextAreaElement | null;
+        const ta = document.querySelector('#impetus-dev-state') as HTMLTextAreaElement | null;
         if (!ta) return;
         const idx = (ta.value || '').indexOf(`"${key}"`);
         if (idx >= 0) { ta.focus(); ta.selectionStart = idx; ta.selectionEnd = idx + key.length + 2; }
@@ -333,7 +333,7 @@ function bootstrapSparkleDevtoolsWithSparkle() {
         const roots = __dev_get_roots(); const root = roots[this.selectedIndex]; if (!root) return;
         const next = JSON.parse(this.stateText || '{}'); const live = __dev_get_state(root) as any; if (!live) return;
         Object.keys(next || {}).forEach(k => { (live as any)[k] = (next as any)[k]; });
-      } catch (e) { console.warn('[sparkle:devtools] bad JSON', e); }
+      } catch (e) { console.warn('[impetus:devtools] bad JSON', e); }
     }
     onEdit($event: any) {
       const val = String($event.target.value || '');
@@ -372,9 +372,9 @@ function bootstrapSparkleDevtoolsWithSparkle() {
     get roots() { return this._listRoots() }
     set roots(_v: any){}
   }
-  // Mount sparkle for this host only
+  // Mount impetus for this host only
   try { init(); panelRef = __dev_get_state(host) as any; } catch {}
 }
 
 let panelRef: any = null;
-document.addEventListener('DOMContentLoaded', bootstrapSparkleDevtoolsWithSparkle);
+document.addEventListener('DOMContentLoaded', bootstrapImpetusDevtoolsWithImpetus);

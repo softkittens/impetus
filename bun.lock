@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "sparkle",
+      "name": "impetus",
       "devDependencies": {
         "@types/bun": "latest",
       },

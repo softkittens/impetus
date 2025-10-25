@@ -83,7 +83,7 @@ function evalInScope(expr: string, state: Scope, $event?: Event) {
     const fn = compile(expr);
     return fn(state, $event);
   } catch (e) {
-    console.warn("sparkle: eval error", expr, e);
+    console.warn("impetus: eval error", expr, e);
     return undefined;
   }
 }
@@ -125,7 +125,7 @@ function assignInScope(path: string, state: Scope, value: any) {
     target[last] = value;
     return value;
   } catch (e) {
-    console.warn('sparkle: assign error', path, e);
+    console.warn('impetus: assign error', path, e);
     return undefined;
   }
 }
@@ -680,7 +680,7 @@ function parseProps(host: Element): Record<string, any> {
   let props: Record<string, any> = {};
   const raw = host.getAttribute("props");
   if (raw) {
-    try { props = JSON.parse(raw); } catch { console.warn("sparkle: invalid props JSON", raw); }
+    try { props = JSON.parse(raw); } catch { console.warn("impetus: invalid props JSON", raw); }
   }
   for (const { name, value } of Array.from(host.attributes)) {
     if (name === "use" || name === "template" || name === "props") continue;
@@ -694,7 +694,7 @@ function mountComponent(host: Element, className: string, inherit: boolean): voi
   if (initialized.has(host)) return;
   const ctor = resolveCtor(className);
   if (typeof ctor !== 'function') {
-    console.warn('sparkle: constructor not found for', className);
+    console.warn('impetus: constructor not found for', className);
     return;
   }
   const props = parseProps(host);
@@ -708,14 +708,14 @@ function mountComponent(host: Element, className: string, inherit: boolean): voi
       par = par.parentElement;
     }
     if (!inherited) {
-      console.warn('sparkle: inherit requested but no parent state found for', className);
+      console.warn('impetus: inherit requested but no parent state found for', className);
       try { instance = new ctor(props); } catch { instance = {}; }
     } else {
       instance = inherited;
     }
   } else {
     try { instance = new ctor(props); } catch (e) {
-      console.warn('sparkle: error constructing', className, e);
+      console.warn('impetus: error constructing', className, e);
       instance = {};
     }
   }
@@ -729,13 +729,13 @@ function mountComponent(host: Element, className: string, inherit: boolean): voi
       host.innerHTML = '';
       host.appendChild(tplEl.content.cloneNode(true));
     } else {
-      console.warn('sparkle: template id not found', tplId);
+      console.warn('impetus: template id not found', tplId);
     }
   }
   initialized.add(host);
   if (!inherit) { try { (instance as any).$el = host; } catch {} }
   // Ensure components see the global shared store in expressions via with(state)
-  try { (instance as any).$store = makeReactive((globalThis as any).__sparkleStore || ((globalThis as any).__sparkleStore = {}), host); } catch {}
+  try { (instance as any).$store = makeReactive((globalThis as any).__impetusStore || ((globalThis as any).__impetusStore = {}), host); } catch {}
   const reactive = makeReactive(instance, host, true);
   rootStateMap.set(host, reactive);
   if (!inherit) componentInstance.set(host, instance);
@@ -761,10 +761,10 @@ function collectBindingsForRoot(root: Element) {
         // avoid re-processing this as an anchor repeatedly
         el.removeAttribute('template');
       } catch (e) {
-        console.warn('sparkle: failed to mount template anchor', id, e);
+        console.warn('impetus: failed to mount template anchor', id, e);
       }
     } else {
-      console.warn('sparkle: template anchor id not found', id);
+      console.warn('impetus: template anchor id not found', id);
     }
   }
 
@@ -949,7 +949,7 @@ function setupScope(root: Element) {
     try {
       initial = JSON.parse(attr);
     } catch (e) {
-      console.warn("sparkle: invalid scope JSON", e);
+      console.warn("impetus: invalid scope JSON", e);
       initial = {};
     }
   }
@@ -959,7 +959,7 @@ function setupScope(root: Element) {
 
   const state = makeReactive(initial, root, true);
   rootStateMap.set(root, state);
-  try { (state as any).$store = makeReactive((globalThis as any).__sparkleStore || ((globalThis as any).__sparkleStore = {}), root); } catch {}
+  try { (state as any).$store = makeReactive((globalThis as any).__impetusStore || ((globalThis as any).__impetusStore = {}), root); } catch {}
   try { devhooks?.onInitRoot?.(root, state); } catch {}
   try { allRoots.add(root); } catch {}
 
@@ -993,7 +993,7 @@ export function init(selector: string = "[scope]") {
     let props: Record<string, any> = {};
     const raw = host.getAttribute("props");
     if (raw) {
-      try { props = JSON.parse(raw); } catch { console.warn("sparkle: invalid props JSON", raw); }
+      try { props = JSON.parse(raw); } catch { console.warn("impetus: invalid props JSON", raw); }
     }
     for (const { name, value } of Array.from(host.attributes)) {
       if (name === "use" || name === "template" || name === "props") continue;
