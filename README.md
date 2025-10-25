@@ -6,9 +6,24 @@ _HTML-first reactivity. Zero build step._
 
 Build reactive UI in plain HTML — no bundler required. Impetus is a tiny template-and-attributes runtime designed for speed and clarity. Ship a single ESM file and progressively enhance any page.
 
+## Get started (CDN)
+
+```html
+<script type="module" src="https://cdn.jsdelivr.net/gh/softkittens/impetus@main/app/impetus.js" defer init></script>
+
+<div scope='{"count":0}'>
+  <button onclick="count++">Clicked {count} times</button>
+  <!-- No build step. Works on any static page. -->
+  <!-- Pin to a release tag (e.g. @v0.1.0) when available. -->
+  <!-- Prefer placing the script in <head> with defer. -->
+</div>
+```
+
 ## Table of Contents
 - [Example](#example)
+- [Component Example](#component-example)
 - [Key Benefits](#key-benefits)
+- [Quick Syntax](#quick-syntax)
 - [Why Impetus](#why-impetus)
 - [When to use Impetus](#when-to-use-impetus)
 - [When not to use Impetus](#when-not-to-use-impetus)
@@ -47,13 +62,86 @@ Build reactive UI in plain HTML — no bundler required. Impetus is a tiny templ
 </div>
 ```
 
+## Component Example
+
+```html
+<!-- Component host (the "component") -->
+<div use="Counter" template="counter" max="5"></div>
+
+<!-- Template (can be anywhere on the page) -->
+<template id="counter">
+  <div>Count: {count}</div>
+  <button onclick="inc()">+</button>
+  <button onclick="dec()">-</button>
+  <div class="text-xs text-gray-500">Max: {max}</div>
+</template>
+
+<!-- Class definition (can live anywhere; CDN auto‑init will find it) -->
+<script type="module">
+  class Counter {
+    static template = 'counter'
+    constructor(props={}) {
+      this.count = 0
+      this.max = props.max ?? 10
+    }
+    inc() { if (this.count < this.max) this.count++ }
+    dec() { if (this.count > 0) this.count-- }
+    onMount() {}
+    onDestroy() {}
+  }
+</script>
+```
+
 ## Key Benefits
-- ⚡ Minimal API: directives, `{expr}` interpolation, simple components.
-- 🔁 Reactive by default: Proxy state, microtask-batched renders.
-- 🧩 Drop-in: static HTML, no VDOM, no compile step.
-- 🛠️ Practical DX: `$event`, outside-click, keyboard helpers.
-- 🧪 Confidence: tested core, examples in `app/`.
- - 🌐 CDN-first: load from a CDN and start immediately.
+- ⚡ **Minimal API**: directives, `{expr}` interpolation, simple components.
+- 🔁 **Reactive by default**: Proxy state, microtask-batched renders.
+- 🧩 **Drop-in**: static HTML, no VDOM, no compile step.
+- 🛠️ **Practical DX**: `$event`, outside-click, keyboard helpers.
+- 🧪 **Confidence**: tested core, examples in `app/`.
+- 🌐 **CDN-first**: load from a CDN and start immediately.
+
+## Quick Syntax
+
+State (scoped root)
+```html
+<div scope='{"name":"Jane","count":0}'>Hello, {name} ({count})</div>
+```
+
+Text + attributes
+```html
+<h1 class="{count>10 ? 'big' : 'small'}">Hi, {name}</h1>
+<div style="{{ color: count>0 ? 'green' : 'red' }}"></div>
+```
+
+Events and $event
+```html
+<input :value="name" />
+<button onclick="(count++)">Clicked {count}</button>
+<div onclick="open=false" onkeydown="($event.key==='Escape') && (open=false)"></div>
+```
+
+Conditional display
+```html
+<div @if="ok">Shown when ok</div>
+<div @else>Fallback</div>
+<div @show="loading" @transition="fade:200">Loading…</div>
+```
+
+Lists
+```html
+<ul>
+  <template @each="items as it,i">
+    <li key="{it.id}">{i}. {it.label}</li>
+  </template>
+  <!-- each clone gets { it, i, $root } -->
+  <!-- key preserves instances across reorders -->
+</ul>
+```
+
+Two-way model (shorthand)
+```html
+<input :value="user.email" />
+```
 
 ## Why Impetus?
 - **Zero-setup progressive enhancement.** Start with a static page and sprinkle behavior.
