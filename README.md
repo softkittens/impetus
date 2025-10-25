@@ -40,6 +40,24 @@ bun run build:watch
 bun run serve
 ```
 
+### Devtools (optional)
+
+Enable the in-page devtools chip during watch builds:
+
+```bash
+bun run build:watch --devtools
+# in another terminal
+bun run serve
+```
+
+Alternatively with an env var:
+
+```bash
+SPARKLE_DEVTOOLS=1 bun run build:watch
+```
+
+Devtools are conditionally loaded at build-time and are not included unless enabled.
+
 Auto-init (one liner):
 ```html
 <script type="module" src="./sparkle.js" defer init></script>
@@ -82,7 +100,7 @@ Event modifiers
 Events
 - Inline: `onclick="count++"`, `oninput="name=$event.target.value"`.
 - `$event` is a safe proxy (methods bound), plus `$event.outside` boolean for outside-click use.
-- Keydown is attached on target element; global keydown is used for `$event.outside` cases.
+- `keydown` listeners are attached on `document` for consistent keyboard behavior; `$event.outside` also uses `document`.
 
 Directives
 - `@if="expr"` / `@else` – conditional insert/remove (paired siblings).
@@ -133,12 +151,27 @@ Notes
 - If `inherit` attribute is present, the component uses the nearest parent scope instance instead of constructing a new one.
 - Templates resolve in order: host `template` attr → `Class.template` → `instance.template`.
 
+### Template anchors
+
+Mount a `<template>` by placing a `template="id"` attribute on an element:
+
+```html
+<template id="card">
+  <div class="card">{title}</div>
+</template>
+
+<section template="card"></section>
+```
+
+At mount time, Sparkle replaces the element’s contents with the cloned template and removes the `template` attribute to avoid re-processing.
+
 ## Reactivity model
 
 - Every mounted root (and component host) is wrapped by a Proxy via `makeReactive`.
 - Any property writes schedule a microtask render of that root.
 - Nested objects are wrapped lazily (on access).
 - Multiple roots bound to the same proxy are tracked and re-rendered.
+- When a reactive proxy is accessed from another root (e.g., `$root` inside `@each` clones), that root is registered as a dependent and will re-render on changes to the shared proxy.
 
 Computed caching
 - Expression results are cached per-root within a render pass.
