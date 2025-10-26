@@ -23,7 +23,7 @@ import { renderBindings } from './render';
 class SimpleDevtools {
   private panel: HTMLDivElement | null = null;     // The main devtools panel
   private textarea: HTMLTextAreaElement | null = null; // State editor textarea
-  private isOpen = false;                          // Whether the panel is visible
+  private isOpen = true;                          // Whether the panel is visible
   private currentRoot: Element | null = null;      // Currently selected component
   private monitorInterval: number | null = null;   // Interval for monitoring state changes
 
@@ -35,6 +35,8 @@ class SimpleDevtools {
   constructor() {
     this.createPanel();
     this.setupKeyboardShortcut();
+    // Open by default if available
+    try { this.show(); } catch {}
   }
 
   /**

@@ -4,6 +4,15 @@
  * This module handles updating the DOM when component state changes.
  * It's the "V" in MVC (View) - the part that actually changes what users see.
  * 
+ * Render phases (why this order):
+ * - Attributes first: classes, styles, values, directives can affect layout/visibility
+ * - Text next: interpolations are cheap and shouldn't be affected by attribute churn
+ * 
+ * Directive handling:
+ * - Structural/visibility directives (`@if`, `@show`, `@each`) are dispatched to directive handlers
+ * - `@transition` is not executed here; it is consumed by the `@show` handler and delegated
+ *   to the transitions module to keep concerns separated
+ * 
  * WHY THIS MODULE EXISTS:
  * - Updates DOM elements when state changes
  * - Handles text interpolations like "Hello {name}!"
@@ -13,6 +22,7 @@
 
 import type { Scope } from './types';
 import { evalInScope, invalidateComputedCache } from './expression';
+import { registerEffect } from './state';
 import { unwrapExpr } from './utils';
 import { DIRECTIVES, PLACEHOLDERS } from './constants';
 import { directiveHandlers } from './directives';
@@ -32,6 +42,8 @@ import { collectBindingsForRoot } from './bindings';
  * WHY: This function is called whenever component state changes
  * It updates only the parts of the DOM that depend on the changed data
  */
+const effectsInitialized = new WeakSet<Element>();
+
 export function renderBindings(state: Scope, root: Element): void {
   // Notify devtools that rendering is starting
   const hooks = getDevtoolsHooks();
@@ -50,6 +62,64 @@ export function renderBindings(state: Scope, root: Element): void {
     try { collectBindingsForRoot(root); } catch {}
     ab = getAttributeBindings(root);
     ib = getInterpolationBindings(root);
+  }
+
+  // If effects already exist for this root, skip batch render (effects will update DOM)
+  if (effectsInitialized.has(root)) {
+    try {
+      if (hooks && typeof hooks.onRenderEnd === 'function') {
+        const end = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        hooks.onRenderEnd(root, { duration: end - start });
+      }
+    } catch {}
+    return;
+  }
+
+  // If effects are not initialized for this root, register per-binding effects
+  if (!effectsInitialized.has(root)) {
+    // Attribute bindings
+    for (const binding of ab) {
+      registerEffect(() => {
+        const raw = binding.expr || "";
+        const expr = unwrapExpr(raw);
+        const attrName = binding.attr;
+        // Directives first (must run even if element is currently detached)
+        if (handleDirective(binding.el, attrName, expr, state, root)) return;
+        // Skip disconnected elements for non-directive attributes
+        try { if (!(binding.el as any).isConnected) return; } catch {}
+        // Specialized handlers
+        const handler = attrHandlers[attrName];
+        if (handler && handler(binding.el, expr, raw, state, root)) return;
+        // Generic
+        handleGenericAttribute(binding.el, attrName, expr, raw, state);
+      }, root);
+    }
+    // Text interpolation bindings
+    for (const binding of ib) {
+      registerEffect(() => {
+        const rendered = binding.template
+          .replace(/\{\{/g, PLACEHOLDERS.LBRACE)
+          .replace(/\}\}/g, PLACEHOLDERS.RBRACE)
+          .replace(/\{([^}]+)\}/g, (_, expr) => {
+            const v = evalInScope(String(expr).trim(), state);
+            return v == null ? "" : String(v);
+          })
+          .replace(new RegExp(PLACEHOLDERS.LBRACE, "g"), "{")
+          .replace(new RegExp(PLACEHOLDERS.RBRACE, "g"), "}");
+        if (binding.node.textContent !== rendered) {
+          binding.node.textContent = rendered;
+        }
+      }, root);
+    }
+    effectsInitialized.add(root);
+    // Per-binding effects will now update the DOM; skip batch rendering
+    try {
+      if (hooks && typeof hooks.onRenderEnd === 'function') {
+        const end = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        hooks.onRenderEnd(root, { duration: end - start });
+      }
+    } catch {}
+    return;
   }
   
   // STEP 1: Update all attribute bindings
@@ -212,7 +282,9 @@ function renderTextInterpolations(state: Scope, root: Element): void {
       .replace(new RegExp(PLACEHOLDERS.LBRACE, "g"), "{")  // placeholder → {
       .replace(new RegExp(PLACEHOLDERS.RBRACE, "g"), "}"); // placeholder → }
     
-    // Update the DOM with the rendered text
-    binding.node.textContent = rendered;
+    // Update the DOM only if it actually changed
+    if (binding.node.textContent !== rendered) {
+      binding.node.textContent = rendered;
+    }
   }
 }

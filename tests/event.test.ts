@@ -44,6 +44,43 @@ describe("Event Handling", () => {
     expect(result).toBe(false);
   });
 
+describe("@each event wiring", () => {
+  test("does not wire or strip handlers on @each template holder", () => {
+    const holder = document.createElement('div') as any;
+    holder.setAttribute('@each', 'items as t,i');
+    holder.setAttribute('onclick', 'noop()');
+    const state: any = { noop() {} };
+    wireEventHandlers(holder, state);
+    expect((holder as any).__getListeners('click').length).toBe(0);
+    expect(holder.hasAttribute('onclick')).toBe(true);
+  });
+
+  test("wires handlers on normal element (simulated clone)", () => {
+    const li = document.createElement('li') as any;
+    li.setAttribute('onclick', 'inc()');
+    const state: any = { n: 0, inc() { state.n++; } };
+    wireEventHandlers(li, state);
+    const clicks = (li as any).__getListeners('click');
+    expect(clicks.length).toBeGreaterThan(0);
+    clicks[0]({ target: li });
+    expect(state.n).toBe(1);
+    expect(li.hasAttribute('onclick')).toBe(false);
+  });
+});
+
+describe("Checkbox onchange reliability", () => {
+  test("checkbox with onchange wires change+click+input", () => {
+    const input = document.createElement('input') as any;
+    (input as any).type = 'checkbox';
+    input.setAttribute('onchange', 'toggle()');
+    const state: any = { toggle() {} };
+    wireEventHandlers(input, state);
+    expect((input as any).__getListeners('change').length).toBeGreaterThan(0);
+    expect((input as any).__getListeners('click').length).toBeGreaterThan(0);
+    expect((input as any).__getListeners('input').length).toBeGreaterThan(0);
+  });
+});
+
   /**
    * Test $event.outside for click-outside detection
    * 
@@ -115,7 +152,7 @@ describe("DOM Event Wiring", () => {
     // keydown listeners are attached to document
     const docListeners = (document as any).__getListeners?.('keydown') || [];
     expect(docListeners.length).toBeGreaterThan(0);
-    const handler = docListeners[0] as any;
+    const handler = docListeners[docListeners.length - 1] as any;
 
     // Non-matching key: Enter
     let prevent = false, stop = false;
@@ -157,5 +194,31 @@ describe("DOM Event Wiring", () => {
     const outsideTarget = document.createElement('div');
     handler({ target: outsideTarget });
     expect(state.closed).toBe(true);
+  });
+});
+
+describe("$event chaining typing safety", () => {
+  test("$event.prevent.enter does not preventDefault for non-Enter keys, but does for Enter", () => {
+    const root = document.createElement('div') as any;
+    root.setAttribute('onkeydown', '$event.prevent.enter && (hit=true)');
+
+    const state: any = { hit: false };
+    wireEventHandlers(root, state);
+    const docListeners = (document as any).__getListeners?.('keydown') || [];
+    expect(docListeners.length).toBeGreaterThan(0);
+    const handler = docListeners[docListeners.length - 1] as any;
+
+    // Non-Enter key should not trigger preventDefault nor the assignment
+    let prevented = false; let stopped = false;
+    handler({ key: 'a', preventDefault: () => { prevented = true; }, stopPropagation: () => { stopped = true; }, target: root });
+    expect(prevented).toBe(false);
+    expect(stopped).toBe(false);
+    expect(state.hit).toBe(false);
+
+    // Enter key should trigger preventDefault and the assignment
+    prevented = false; stopped = false;
+    handler({ key: 'Enter', preventDefault: () => { prevented = true; }, stopPropagation: () => { stopped = true; }, target: root });
+    expect(prevented).toBe(true);
+    expect(state.hit).toBe(true);
   });
 });

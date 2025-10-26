@@ -1,3 +1,15 @@
+/**
+ * IMPETUS FRAMEWORK - Transitions
+ * 
+ * Applies enter/leave effects for elements controlled by `@show`.
+ * Currently supports a simple `fade[:durationMs]` transition.
+ * 
+ * WHY THIS MODULE EXISTS:
+ * - Gives a lightweight way to animate visibility changes without DOM churn
+ * - Keeps timing and visibility concerns in one place
+ * - Handles rapid toggles safely (e.g., open → close → open) using per‑element versioning
+ *   so stale timeouts from older transitions can't override the latest state
+ */
 const transitionVersion = new WeakMap<HTMLElement, number>();
 
 export function applyTransition(el: HTMLElement, spec: string, show: boolean): void {

@@ -102,11 +102,14 @@ export function mountComponent(host: Element, className: string, inherit: boolea
   /**
    * TEMPLATE RESOLUTION
    * 
-   * Find and apply the component's template
-   * Templates can be specified in multiple ways:
-   * 1. host element attribute: <div use="MyComp" template="my-template"></div>
-   * 2. static class property: class MyComp { static template = 'my-template' }
-   * 3. instance property: constructor() { this.template = 'my-template' }
+   * Find and apply the component's template.
+   * 
+   * Precedence (highest → lowest):
+   * 1) Host element attribute: <div use="MyComp" template="my-template"></div>
+   * 2) Inline content: Use the host element's existing children as the template
+   * 3) Template id passed as prop: <div use="MyComp" template="tpl-id"></div>
+   * 4) Static class property (deprecated): class MyComp { static template = 'tpl-id' }
+   * 5) Instance property (deprecated): constructor(){ this.template = 'tpl-id' }
    */
   resolveTemplate(host, ctor, instance);
   

@@ -194,7 +194,7 @@ describe("Attributes", () => {
         const result = attrHandlers.class?.(mockElement, "active large", "{active} {large}", mockState, mockElement);
         
         expect(result).toBe(true);
-        expect(mockElement.getAttribute("class")).toBe("true"); // Fixed: normalizeClass removes false values
+        expect(mockElement.getAttribute("class")).toBe("true"); // Note: normalizeClass removes falsy values like false
       });
 
       /**
@@ -379,22 +379,19 @@ describe("Attributes", () => {
       mockState.disabled = true;
       handleGenericAttribute(mockElement, "disabled", "disabled", "{disabled}", mockState);
       
-      expect(mockElement.hasAttribute("disabled")).toBe(true); // Fixed: check attribute instead of property
+      expect(mockElement.hasAttribute("disabled")).toBe(true); // Check attribute presence rather than property for boolean attributes
     });
 
     /**
      * Test false boolean attribute handling
      * 
-     * False values are stringified as "false" rather than
-     * removing the attribute. This is a design choice for
-     * consistency in template processing.
+     * Boolean attributes should be removed when false.
      */
     test("removes boolean attributes when false", () => {
       mockState.disabled = false;
       handleGenericAttribute(mockElement, "disabled", "disabled", "{disabled}", mockState);
       
-      expect(mockElement.hasAttribute("disabled")).toBe(true); // Fixed: false values are stringified as "false"
-      expect(mockElement.getAttribute("disabled")).toBe("false");
+      expect(mockElement.hasAttribute("disabled")).toBe(false);
     });
 
     /**
@@ -425,26 +422,26 @@ describe("Attributes", () => {
     /**
      * Test true value handling
      * 
-     * True values should be stringified as "true".
+     * Generic attributes set to true are present with an empty string value.
      */
     test("handles true values for generic attributes", () => {
       mockState.visible = true;
       handleGenericAttribute(mockElement, "visible", "visible", "{visible}", mockState);
       
-      expect(mockElement.getAttribute("visible")).toBe("true"); // Fixed: true values are stringified
+      expect(mockElement.hasAttribute("visible")).toBe(true);
+      expect(mockElement.getAttribute("visible")).toBe("");
     });
 
     /**
      * Test false value handling
      * 
-     * False values should be stringified as "false".
+     * Generic attributes set to false are removed.
      */
     test("handles false values for generic attributes", () => {
       mockState.visible = false;
       handleGenericAttribute(mockElement, "visible", "visible", "{visible}", mockState);
       
-      expect(mockElement.hasAttribute("visible")).toBe(true); // Fixed: false values are stringified as "false"
-      expect(mockElement.getAttribute("visible")).toBe("false");
+      expect(mockElement.hasAttribute("visible")).toBe(false);
     });
 
     /**
@@ -472,17 +469,14 @@ describe("Attributes", () => {
     });
 
     /**
-     * Test class and style attribute handling
+     * Test class and style attribute handling (generic path)
      * 
-     * Even though class and style have specific handlers,
-     * the generic handler also processes templates for them.
-     * This test verifies that behavior.
+     * Class/style are normally handled by specific handlers. Calling the generic
+     * handler directly still assigns the evaluated value based on the expression.
      */
-    test("does not apply template replacement for class and style", () => {
-      // These should be handled by their specific handlers
+    test("generic handler assigns evaluated value for class", () => {
       handleGenericAttribute(mockElement, "class", "className", "{className}", mockState);
       
-      // Actually handleGenericAttribute does replace templates for class and style
       expect(mockElement.getAttribute("class")).toBe("active");
     });
 

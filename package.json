@@ -3,11 +3,12 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "sideEffects": false,
   "scripts": {
     "dev": "bun --hot index.ts",
     "start": "bun index.ts",
     "build": "bun build index.ts --outdir dist --target bun",
-    "build:browser": "bun build src/index.ts --outfile app/impetus.js --target browser --format esm --minify",
+    "build:browser": "bun build src/index.ts --outfile app/impetus.js --target browser --format esm --minify --define DEVTOOLS=false",
     "build:watch": "WATCH=1 bun serve.ts",
     "serve": "bun serve.ts",
     "dev:watch": "WATCH=1 bun serve.ts",

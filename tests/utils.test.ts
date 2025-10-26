@@ -149,7 +149,7 @@ describe("Utils", () => {
       expect(normalizeStyle({})).toBe("");
       expect(normalizeStyle(null)).toBe("");
       expect(normalizeStyle(undefined)).toBe("");
-      expect(normalizeStyle("color: red;")).toBe("color: red;"); // Fixed expectation
+      expect(normalizeStyle("color: red;")).toBe("color: red;"); // Trailing semicolon preserved in string input
     });
 
     /**
@@ -398,8 +398,8 @@ describe("Utils", () => {
       
       expect(props).toEqual({
         title: "Hello",
-        "data-id": 123, // Fixed: data- and aria- attributes keep original names
-        "aria-label": "Test", // Fixed: data- and aria- attributes keep original names
+        "data-id": 123, // Note: data- and aria- attributes keep original names
+        "aria-label": "Test", // Note: data- and aria- attributes keep original names
         disabled: true,
         count: 42,
         custom: "value"

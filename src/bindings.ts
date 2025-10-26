@@ -3,11 +3,14 @@
  * 
  * This module finds and tracks all data bindings in component templates.
  * Bindings are connections between data (state) and the DOM (UI).
+ * It also mounts nested class-based components declared via [use]
+ * or the shorthand `use-<kebab-class>` convention.
  * 
  * WHY THIS MODULE EXISTS:
  * - Scans templates to find where data is used
  * - Tracks attribute bindings like class="active ? 'active' : ''"
  * - Tracks text interpolations like "Hello {name}!"
+ * - Mounts nested components (both [use] and `use-<kebab>` forms)
  * - Enables efficient re-rendering by knowing what to update
  */
 
@@ -169,7 +172,27 @@ function collectAttributeBindings(root: Element): void {
   const abinds: AttrBinding[] = [];
   
   // Get all elements in this component (including the root)
-  const all = [root, ...Array.from(root.querySelectorAll("*"))] as Element[];
+  let all: Element[] = [];
+  try {
+    const qsa = Array.from(root.querySelectorAll("*")) as Element[];
+    all = [root, ...qsa];
+  } catch {
+    all = [root];
+  }
+  // Fallback traversal when querySelectorAll is unavailable or returns no descendants
+  if (all.length === 1) {
+    const stack: any[] = [root as any];
+    while (stack.length) {
+      const cur = stack.pop();
+      all.push(cur as Element);
+      try {
+        const children = (cur && (cur as any).children) || [];
+        for (let i = children.length - 1; i >= 0; i--) stack.push(children[i]);
+      } catch {}
+    }
+    // The first push duplicates root; remove the first duplicate
+    all = Array.from(new Set(all));
+  }
   
   all.forEach((el) => {
     // Skip elements inside @each templates

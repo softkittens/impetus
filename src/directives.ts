@@ -1,3 +1,14 @@
+/**
+ * IMPETUS FRAMEWORK - Directive Handlers
+ * 
+ * Implements structural and visibility directives used in templates.
+ * 
+ * WHY THIS MODULE EXISTS:
+ * - Directives like `@if/@else`, `@show`, and `@each` need DOM manipulation
+ *   beyond simple attribute setting (insert/remove, clone, hide/show)
+ * - Centralizing their logic keeps the renderer simple and makes behavior clear
+ * - Encapsulates details like placeholder comments and else-sibling pairing
+ */
 import type { Scope, DirectiveHandler } from './types';
 import { evalInScope } from './expression';
 import { parseEachExpression, findElseSibling } from './utils';
@@ -20,24 +31,29 @@ export const handleIfDirective: DirectiveHandler = (el, expr, state) => {
   if (!placeholder) {
     placeholder = document.createComment('if');
     try {
-      const parentNode = el.parentNode;
+      const parentNode = el.parentNode as (Node | null);
       if (parentNode) parentNode.insertBefore(placeholder, el);
     } catch {}
     ifPlaceholders.set(el, placeholder);
   }
   
-  const parent = placeholder.parentNode;
+  // Fallback: if placeholder couldn't be inserted (e.g., test DOM), use the element's parent
+  let parent = placeholder.parentNode as (Node | null);
+  if (!parent) parent = el.parentNode;
   if (!parent) return;
   
   // Find else sibling if present
   const elseSibling = findElseSibling(el);
   
   if (show) {
-    if (placeholder.nextSibling !== el) {
+    // Ensure original element is present just after the placeholder, or append if no placeholder in DOM
+    if (placeholder.parentNode && placeholder.nextSibling !== el) {
       try { parent.insertBefore(el, placeholder.nextSibling); } catch {}
-      // Ensure events are wired for newly inserted subtree
-      try { getWireEventHandlers()(el, state); } catch {}
+    } else if (el.parentNode !== parent) {
+      try { (parent as Element).appendChild(el); } catch {}
     }
+    // Ensure events are wired for newly inserted subtree
+    try { getWireEventHandlers()(el, state); } catch {}
     if (elseSibling) {
       const elseParent = elseSibling.parentNode;
       if (elseParent) {
@@ -50,12 +66,16 @@ export const handleIfDirective: DirectiveHandler = (el, expr, state) => {
       }
     }
   } else {
+    // Remove element when condition is false (structural change)
     if (el.parentNode) {
       try { el.parentNode.removeChild(el); } catch {}
     }
-    if (elseSibling && placeholder.nextSibling !== elseSibling) {
-      try { parent.insertBefore(elseSibling, placeholder.nextSibling); } catch {}
-      // Wire events on else block subtree as it becomes active
+    if (elseSibling && (!placeholder.parentNode || placeholder.nextSibling !== elseSibling)) {
+      try { parent.insertBefore(elseSibling, (placeholder as any).nextSibling || null); }
+      catch { try { (parent as Element).appendChild(elseSibling); } catch {} }
+    }
+    // Wire events on else block subtree as it becomes active
+    if (elseSibling) {
       try { getWireEventHandlers()(elseSibling, state); } catch {}
     }
     // Show else sibling
@@ -77,6 +97,7 @@ export const handleShowDirective: DirectiveHandler = (el, expr, state) => {
     applyTransition(el as HTMLElement, spec || 'fade', visible);
     return;
   }
+  // Toggle ARIA + display while keeping node in the DOM
   if (visible) {
     el.removeAttribute('hidden');
     el.removeAttribute('aria-hidden');

@@ -50,9 +50,13 @@ export function compile(expr: string): Function {
      * WHY: "with(state)" allows us to write "name" instead of "state.name" in templates
      * This makes templates much cleaner and more readable
      */
-    // eslint-disable-next-line no-new-func
-    fn = new Function("state", "$event", `with(state){ return ( ${expr} ) }`);
-    
+    try {
+      // eslint-disable-next-line no-new-func
+      fn = new Function("state", "$event", `with(state){ return ( ${expr} ) }`);
+    } catch (e) {
+      // Re-throw to be handled by evalInScope, keeping logging consistent
+      throw e;
+    }
     // Cache the compiled function for future use
     exprCache.set(expr, fn);
   }

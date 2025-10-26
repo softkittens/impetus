@@ -8,6 +8,8 @@
  * - Provides a single entry point for the entire framework
  * - Sets up global references so modules can talk to each other
  * - Initializes components and manages their lifecycle
+ *   (supports [scope] roots, class components via [use],
+ *    and shorthand hosts via use-<kebab-class>)
  * - Handles the main initialization logic
  */
 
@@ -20,27 +22,14 @@ declare const DEVTOOLS: boolean;
 import type { Scope } from './types';           // Type definitions for better code safety
 import { stateManager } from './state';         // Manages component state (data)
 import { makeReactive } from './state';         // Makes data reactive (updates UI when changed)
-import { evalInScope, invalidateComputedCache } from './expression'; // Evaluates expressions like {name}
 import { collectBindingsForRoot, clearBindings } from './bindings';   // Finds and tracks data bindings
 import { renderBindings } from './render';      // Updates the DOM when data changes
 import { wireEventHandlers, removeEventListeners } from './events';   // Handles user interactions (clicks, inputs)
 import { mountComponent, destroyComponent, isComponentInitialized } from './components';     // Manages component lifecycle
-import { applyTransition } from './transitions'; // Handles animations and transitions
-import { registerRuntimeApi, getRenderBindings, getWireEventHandlers, getDestroy, getMountComponent } from './runtime-api';
+import { registerRuntimeApi, getRenderBindings, getWireEventHandlers } from './runtime-api';
 import { setDevtoolsHooks, getDevtoolsHooks } from './devtools-hooks';
+import { stopEffectsForRoot } from './state';
 export { setDevtoolsHooks, getDevtoolsHooks };
-
-/**
- * STUB FUNCTIONS FOR DEVTOOLS
- * 
- * WHY: These functions prevent crashes when devtools aren't loaded
- * They return empty/default values so the framework continues working
- */
-export function __dev_get_roots(): Element[] { return []; }
-export function __dev_get_state(root: Element): any { return undefined; }
-export function __dev_get_bindings(root: Element): { attrs: any[]; interps: any[] } {
-  return { attrs: [], interps: [] };
-}
 
 /**
  * CIRCULAR DEPENDENCY FIX
@@ -55,7 +44,6 @@ registerRuntimeApi({
   destroy,
   mountComponent,
 });
-(stateManager as any).renderBindings = renderBindings;
 
 /**
  * COMPONENT SETUP FUNCTION
@@ -74,25 +62,28 @@ registerRuntimeApi({
  */
 function setupScope(root: Element): void {
   // STEP 1: Parse initial state from the "scope" attribute
-  // The scope attribute contains JSON data like: scope="{'name': 'John', 'age': 25}"
-  const attr = root.getAttribute("scope") ?? root.getAttribute("x-data");
+  // The scope attribute contains a JS object literal: scope="{ name: 'John', age: 25 }"
+  const attr = root.getAttribute("scope");
   let initial: Scope = {}; // Default to empty object if no scope attribute
   
   if (attr && attr.trim()) {
     try {
-      initial = JSON.parse(attr);
-    } catch (e) {
-      // Fallback: accept JS object literal (Alpine x-data compatible)
-      // This allows functions, trailing commas, single quotes, etc.
-      try {
-        // eslint-disable-next-line no-new-func
-        const obj = new Function(`return ( ${attr} )` )();
-        if (obj && typeof obj === 'object') initial = obj as Scope;
-        else initial = {};
-      } catch (ee) {
-        console.warn("impetus: invalid scope", ee);
-        initial = {};
-      }
+      // Only support JS object literal evaluation (allows functions, single quotes, etc.)
+      // eslint-disable-next-line no-new-func
+      // TODO:
+      // Try JSON first, else evaluate via your expression pipeline, passing { $el, $store } as locals.
+      // Enforce result to be a plain object; else warn and use {}.
+      // Cache compiled expressions.
+      // Scoped evaluation:
+      // If you do expression support, evaluate with a controlled scope object (with (scope) { ... }) backed 
+      // by a null-prototype to reduce accidental global access.
+      
+      const obj = new Function(`return ( ${attr} )` )();
+      if (obj && typeof obj === 'object') initial = obj as Scope;
+      else initial = {};
+    } catch (ee) {
+      console.warn("impetus: invalid scope", ee);
+      initial = {};
     }
   }
 
@@ -156,7 +147,7 @@ function setupScope(root: Element): void {
  * WHY: We need to find all components on the page and initialize them
  * This is typically called once when the page loads
  */
-export function init(selector: string = "[scope],[x-data]"): void {
+export function init(selector: string = "[scope]"): void {
   // Don't run on server-side (SSR)
   if (typeof document === "undefined") return;
   
@@ -179,40 +170,6 @@ export function init(selector: string = "[scope],[x-data]"): void {
     mountComponent(host, className, inherit);
   }
 
-  // STEP 3: Also support shorthand host syntax: use-<kebab-class>="templateId?"
-  // Example: <div use-fancy-counter> (inline template)
-  //          <div use-fancy-counter="card"> (sets template="card")
-  const all = Array.from(document.querySelectorAll('*')) as Element[];
-  const kebabToPascal = (kebab: string): string => kebab
-    .split('-')
-    .filter(Boolean)
-    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
-    .join('');
-
-  for (const el of all) {
-    const tag = el.tagName;
-    if (tag === 'TEMPLATE' || tag === 'SCRIPT') continue;
-    // Find first attribute that starts with "use-"
-    const attrs = Array.from(el.attributes);
-    const useAttr = attrs.find(a => a.name.startsWith('use-'));
-    if (!useAttr) continue;
-
-    const kebab = useAttr.name.slice('use-'.length);
-    const className = kebabToPascal(kebab);
-    if (!className) continue;
-
-    // If a value is provided and no explicit template attr exists, set it
-    const tplId = (useAttr.value || '').trim();
-    if (tplId && !el.hasAttribute('template')) {
-      try { el.setAttribute('template', tplId); } catch {}
-    }
-    const inherit = el.hasAttribute('inherit');
-    if (!isComponentInitialized(el)) {
-      mountComponent(el, className, inherit);
-    }
-    // Remove processed shorthand attribute to avoid confusion in props/bindings
-    try { el.removeAttribute(useAttr.name); } catch {}
-  }
 }
 
 /**
@@ -234,6 +191,8 @@ export function destroy(root: Element): void {
   // WHY: Removes references to the component from internal tracking
   clearBindings(root);
   stateManager.removeRoot(root);
+  // Stop any per-binding effects registered for this root
+  try { stopEffectsForRoot(root); } catch {}
   
   // STEP 3: Destroy component instance if it's a class component
   // WHY: Calls the component's destroy method for cleanup
@@ -264,6 +223,17 @@ export { evalInScope } from './expression';
  * This enables better type safety and IDE autocomplete
  */
 export type { Scope, DevtoolsHooks } from './types';
+
+/**
+ * STUB FUNCTIONS FOR DEVTOOLS
+ * 
+ * WHY: Prevent crashes when devtools aren't loaded.
+ */
+export function __dev_get_roots(): Element[] { return []; }
+export function __dev_get_state(root: Element): any { return undefined; }
+export function __dev_get_bindings(root: Element): { attrs: any[]; interps: any[] } {
+  return { attrs: [], interps: [] };
+}
 
 /**
  * AUTO-INITIALIZATION SUPPORT

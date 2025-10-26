@@ -13,6 +13,7 @@
 
 import type { Scope } from './types';
 import { isPlainObject } from './utils';
+import { getRenderBindings } from './runtime-api';
 
 /**
  * WEAKMAPS FOR MEMORY MANAGEMENT
@@ -24,6 +25,108 @@ import { isPlainObject } from './utils';
 const reactiveCache = new WeakMap<object, any>();   // Cache of original object -> proxy
 const reactiveProxies = new WeakSet<object>();     // Set of all proxy objects we've created
 const proxyRoots = new WeakMap<object, Set<Element>>(); // Maps proxy -> set of DOM elements using it
+// Cache of bound methods per proxy to avoid rebinding on every access
+const methodBindCache = new WeakMap<object, WeakMap<Function, Function>>();
+
+/**
+ * LIGHTWEIGHT EFFECT SYSTEM
+ * 
+ * Tracks property-level dependencies for reactive targets and re-runs effects
+ * when those properties change. This enables per-binding updates similar to
+ * Alpine-style effects without introducing a VDOM.
+ */
+type EffectFn = () => void;
+type DepMap = Map<PropertyKey, Set<Effect>>;
+type TargetMap = WeakMap<object, DepMap>;
+type Effect = { run: EffectFn; deps: Array<[object, PropertyKey]>; root: Element; stopped?: boolean };
+
+const targetMap: TargetMap = new WeakMap();
+let activeEffect: Effect | null = null;
+let pending = new Set<Effect>();
+let flushing = false;
+const rootEffects = new WeakMap<Element, Set<Effect>>();
+
+function track(target: object, key: PropertyKey) {
+  if (!activeEffect) return;
+  let deps = targetMap.get(target);
+  if (!deps) {
+    deps = new Map();
+    targetMap.set(target, deps);
+  }
+  let dep = deps.get(key);
+  if (!dep) {
+    dep = new Set();
+    deps.set(key, dep);
+  }
+  if (!dep.has(activeEffect)) {
+    dep.add(activeEffect);
+    activeEffect.deps.push([target, key]);
+  }
+}
+
+function cleanup(effect: Effect) {
+  for (const [t, k] of effect.deps) {
+    const deps = targetMap.get(t);
+    const dep = deps && deps.get(k);
+    if (dep) dep.delete(effect);
+  }
+  effect.deps = [];
+}
+
+function schedule(effect: Effect) {
+  if (effect.stopped) return;
+  pending.add(effect);
+  if (!flushing) {
+    flushing = true;
+    queueMicrotask(() => {
+      try {
+        pending.forEach(e => {
+          cleanup(e);
+          activeEffect = e;
+          try { e.run(); } catch {}
+          activeEffect = null;
+        });
+      } finally {
+        pending.clear();
+        flushing = false;
+      }
+    });
+  }
+}
+
+function trigger(target: object, key: PropertyKey) {
+  const deps = targetMap.get(target);
+  const dep = deps && deps.get(key);
+  if (!dep) return;
+  dep.forEach(e => schedule(e));
+}
+
+export function registerEffect(fn: EffectFn, root: Element): { stop(): void } {
+  const eff: Effect = { run: fn, deps: [], root };
+  // track effects by root for cleanup
+  let set = rootEffects.get(root);
+  if (!set) { set = new Set(); rootEffects.set(root, set); }
+  set.add(eff);
+  // run once immediately to initialize
+  cleanup(eff);
+  activeEffect = eff;
+  try { eff.run(); } finally { activeEffect = null; }
+  return {
+    stop() {
+      eff.stopped = true;
+      cleanup(eff);
+      const rs = rootEffects.get(root);
+      if (rs) rs.delete(eff);
+    }
+  };
+}
+
+export function stopEffectsForRoot(root: Element): void {
+  const set = rootEffects.get(root);
+  if (!set) return;
+  set.forEach(e => { e.stopped = true; cleanup(e); });
+  set.clear();
+}
 
 /**
  * STATE MANAGER CLASS
@@ -72,11 +175,11 @@ export class StateManager {
         });
         
         // Call the main render function to update the DOM
-        // WHY: This is injected from index.ts to avoid circular imports
-        const renderer = (this as any).renderBindings;
-        if (typeof renderer === 'function') {
+        // Obtain renderer via runtime-api to avoid direct circular import
+        try {
+          const renderer = getRenderBindings();
           renderer(state, root);
-        }
+        } catch {}
       }
     });
   }
@@ -97,6 +200,8 @@ export class StateManager {
    */
   setRootState(root: Element, state: Scope): void {
     this.rootStateMap.set(root, state);
+    // Clear any temporary init mark now that the root has a state
+    try { this.initMarks.delete(root); } catch {}
   }
 
   /**
@@ -136,7 +241,11 @@ export class StateManager {
    * Prevents memory leaks and keeps the root list accurate
    */
   removeRoot(root: Element): void {
-    this.allRoots.delete(root);
+    // Cleanup all internal tracking for this root
+    try { this.allRoots.delete(root); } catch {}
+    try { this.rootStateMap.delete(root); } catch {}
+    try { this.initMarks.delete(root); } catch {}
+    try { this.scheduled.delete(root); } catch {}
   }
 
   /**
@@ -311,13 +420,37 @@ export function makeReactive<T extends object>(obj: T, root: Element, isRoot: bo
      * @returns The property value (possibly made reactive)
      */
     get(target, prop, receiver) {
+      // Track property access for active effects
+      try { track(target as unknown as object, prop as PropertyKey); } catch {}
       const val = Reflect.get(target, prop, receiver);
       
       // Special handling for root component methods
-      // WHY: We want 'this' to point to the proxy in component methods
-      // This allows methods to access other reactive properties correctly
+      // WHY: Ensure methods are bound to the ROOT proxy even when accessed via prototype chain
+      // (e.g., inside @each clones). This preserves `this` as the component state.
       if (isRoot && typeof val === 'function') {
-        try { return val.bind(receiver); } catch { return val; }
+        try {
+          let cache = methodBindCache.get(proxy);
+          if (!cache) { cache = new WeakMap<Function, Function>(); methodBindCache.set(proxy, cache); }
+          const cached = cache.get(val);
+          if (cached) return cached;
+          const bound = (val as Function).bind(proxy);
+          cache.set(val as Function, bound);
+          return bound;
+        } catch { return val; }
+      }
+      // Non-root proxies: bind to $root if present (root proxy), else bind to the accessing proxy (receiver)
+      if (!isRoot && typeof val === 'function') {
+        try {
+          const rootRef = (target as any) && (target as any).$root;
+          const bindTarget = (rootRef && reactiveProxies.has(rootRef as unknown as object)) ? rootRef : receiver;
+          let cache = methodBindCache.get(bindTarget as unknown as object);
+          if (!cache) { cache = new WeakMap<Function, Function>(); methodBindCache.set(bindTarget as unknown as object, cache); }
+          const cached = cache.get(val as Function);
+          if (cached) return cached;
+          const bound = (val as Function).bind(bindTarget);
+          cache.set(val as Function, bound);
+          return bound;
+        } catch { return val; }
       }
       
       // Recursively make nested objects reactive
@@ -326,9 +459,16 @@ export function makeReactive<T extends object>(obj: T, root: Element, isRoot: bo
       if (val && typeof val === 'object') {
         // If this is already one of our reactive proxies, register this root
         if (reactiveProxies.has(val as unknown as object)) {
-          const roots = proxyRoots.get(val as unknown as object) || new Set<Element>();
-          roots.add(root);
-          proxyRoots.set(val as unknown as object, roots);
+          let roots = proxyRoots.get(val as unknown as object);
+          if (!roots) {
+            roots = new Set<any>();
+            proxyRoots.set(val as unknown as object, roots);
+          }
+          try {
+            roots.add(typeof WeakRef !== 'undefined' ? new WeakRef(root) : (root as any));
+          } catch {
+            roots.add(root as any);
+          }
           return val;
         }
         
@@ -352,17 +492,39 @@ export function makeReactive<T extends object>(obj: T, root: Element, isRoot: bo
      * @returns True if the set was successful
      */
     set(target, prop, value, receiver) {
+      // Skip scheduling if the value doesn't actually change
+      const oldVal = Reflect.get(target, prop, receiver);
+      if (Object.is(oldVal, value)) {
+        return true;
+      }
+      // Ignore array length adjustments; index sets will schedule updates
+      if (prop === 'length' && Array.isArray(target)) {
+        return Reflect.set(target, prop, value, receiver);
+      }
       // Actually set the property on the original object
       const res = Reflect.set(target, prop, value, receiver);
+      // Trigger effects for this key
+      try { trigger(target as unknown as object, prop as PropertyKey); } catch {}
       
       // Get all components that use this object
-      const roots = proxyRoots.get(proxy) || new Set<Element>();
-      if (roots.size === 0) roots.add(root); // Fallback to current root
-      proxyRoots.set(proxy, roots);
+      let roots = proxyRoots.get(proxy);
+      if (!roots) {
+        roots = new Set<any>();
+        proxyRoots.set(proxy, roots);
+      }
+      if (roots.size === 0) {
+        try { roots.add(typeof WeakRef !== 'undefined' ? new WeakRef(root) : (root as any)); }
+        catch { roots.add(root as any); }
+      }
       
-      // Schedule all affected components for re-render
-      // WHY: Any component using this object needs to update its UI
-      roots.forEach((r) => stateManager.scheduleRender(r));
+      // Schedule all affected components for re-render; drop dead WeakRefs
+      roots.forEach((r: any) => {
+        let el: Element | undefined;
+        try { el = (r && typeof r.deref === 'function') ? r.deref() : (r as Element); }
+        catch { el = r as Element; }
+        if (el) stateManager.scheduleRender(el);
+        else try { roots!.delete(r); } catch {}
+      });
       
       return res;
     },
@@ -377,14 +539,28 @@ export function makeReactive<T extends object>(obj: T, root: Element, isRoot: bo
     deleteProperty(target, prop) {
       // Actually delete the property from the original object
       const res = Reflect.deleteProperty(target, prop);
+      // Trigger effects for this key
+      try { trigger(target as unknown as object, prop as PropertyKey); } catch {}
       
       // Get all components that use this object
-      const roots = proxyRoots.get(proxy) || new Set<Element>([root]);
-      proxyRoots.set(proxy, roots);
+      let roots = proxyRoots.get(proxy);
+      if (!roots) {
+        roots = new Set<any>();
+        proxyRoots.set(proxy, roots);
+      }
+      if (roots.size === 0) {
+        try { roots.add(typeof WeakRef !== 'undefined' ? new WeakRef(root) : (root as any)); }
+        catch { roots.add(root as any); }
+      }
       
-      // Schedule all affected components for re-render
-      // WHY: Deleting a property is also a change that should update the UI
-      roots.forEach((r) => stateManager.scheduleRender(r));
+      // Schedule all affected components for re-render; drop dead WeakRefs
+      roots.forEach((r: any) => {
+        let el: Element | undefined;
+        try { el = (r && typeof r.deref === 'function') ? r.deref() : (r as Element); }
+        catch { el = r as Element; }
+        if (el) stateManager.scheduleRender(el);
+        else try { roots!.delete(r); } catch {}
+      });
       
       return res;
     },
@@ -393,7 +569,13 @@ export function makeReactive<T extends object>(obj: T, root: Element, isRoot: bo
   // Store the proxy in our tracking systems
   reactiveCache.set(obj as unknown as object, proxy);
   reactiveProxies.add(proxy);
-  proxyRoots.set(proxy, new Set<Element>([root]));
+  try {
+    const s = new Set<any>();
+    s.add(typeof WeakRef !== 'undefined' ? new WeakRef(root) : (root as any));
+    proxyRoots.set(proxy, s);
+  } catch {
+    proxyRoots.set(proxy, new Set<any>([root as any]));
+  }
   
   return proxy as T;
 }
@@ -425,5 +607,17 @@ export function isReactiveProxy(obj: any): boolean {
  * Helps see which components are affected by state changes
  */
 export function getProxyRoots(proxy: object): Set<Element> {
-  return proxyRoots.get(proxy) || new Set();
+  const roots = proxyRoots.get(proxy);
+  if (!roots) return new Set<Element>();
+  const out = new Set<Element>();
+  roots.forEach((r: any) => {
+    let el: Element | undefined;
+    try { el = (r && typeof r.deref === 'function') ? r.deref() : (r as Element); }
+    catch { el = r as Element; }
+    if (el) out.add(el);
+    else {
+      try { roots.delete(r); } catch {}
+    }
+  });
+  return out;
 }
