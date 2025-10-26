@@ -84,17 +84,12 @@ export function evalInScope(expr: string, state: Scope, $event?: Event) {
   }
 }
 
-export function execInScope(code: string, state: Scope, $event?: Event) {
+export function execInScope(code: string, scope: Scope, $event?: any): any {
   try {
-    let fn = stmtCache.get(code);
-    if (!fn) {
-      // eslint-disable-next-line no-new-func
-      fn = new Function("state", "$event", `with(state){ ${code} }`);
-      stmtCache.set(code, fn);
-    }
-    return (fn as any)(state, $event);
+    const compiled = compile(code);
+    return compiled(scope, $event);
   } catch (e) {
-    console.warn("impetus: exec error", code, e);
+    console.warn('impetus: exec error', code, e);
     return undefined;
   }
 }

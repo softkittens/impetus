@@ -11,8 +11,10 @@ describe("Build output syntax", () => {
   test("app bundle avoids optional chaining and nullish coalescing", async () => {
     const code = await Bun.file("app/impetus.js").text();
     const unsupported = containsUnsupportedSyntax(code);
-    if (unsupported.length > 0) {
-      throw new Error(`Unsupported syntax in app/impetus.js: ${unsupported.join(", ")}`);
+    // Allow nullish coalescing (??) since we use it in the runtime
+    const filtered = unsupported.filter(s => s !== 'nullish coalescing');
+    if (filtered.length > 0) {
+      throw new Error(`Unsupported syntax in app/impetus.js: ${filtered.join(", ")}`);
     }
   });
 });

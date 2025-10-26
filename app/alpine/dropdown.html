@@ -4,14 +4,21 @@
 
 <div class="flex justify-center">
     <div 
-        scope='{
-            "open":false
-        }'
+        scope="{
+            open:false,
+            toggle() {
+                this.open = this.open ? this.close() : true
+            },
+            close() {
+                this.open = false
+            },
+        }"
+        onkeydown="$event.escape.prevent.stop && close()"
         class="relative"
     >
         <!-- Button -->
         <button 
-            onclick="open = !open"
+            onclick="toggle()"
             type="button" 
             class="flex items-center gap-2 bg-white px-5 py-2.5 rounded-md shadow"
         >
@@ -28,7 +35,12 @@
 
         <!-- Panel -->
         <div 
-            class="absolute left-0 mt-2 w-40 rounded-md bg-white shadow-md {open ? 'block' : 'hidden'}"
+            ref="panel"
+            @show="open"
+            @transition="fade"
+            onclick="$event.outside && close()"
+            style="display: none;"
+            class="absolute left-0 mt-2 w-40 rounded-md bg-white shadow-md"
         >
             <a href="#"
                 class="flex items-center gap-2 w-full first-of-type:rounded-t-md last-of-type:rounded-b-md px-4 py-2.5 text-left text-sm hover:bg-gray-50 disabled:text-gray-500">
@@ -46,4 +58,5 @@
             </a>
         </div>
     </div>
+
 </div>

@@ -221,9 +221,10 @@ export class StateManager {
    */
   clear(): void {
     this.scheduled = new WeakSet();
+    this.initMarks = new WeakSet();
     this.rootStateMap = new WeakMap();
-    this.allRoots.clear();
-    this.renderCallbacks.clear();
+    this.allRoots = new Set();
+    this.renderCallbacks = new Set();
   }
 
   /**

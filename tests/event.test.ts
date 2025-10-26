@@ -13,7 +13,17 @@
  */
 
 import { expect, test, describe, beforeEach } from "./setup";
-import { evalInScope } from "../src/expression";
+import { 
+  compile, 
+  evalInScope, 
+  evalComputed, 
+  assignInScope, 
+  resolveCtor,
+  clearExpressionCache,
+  getExpressionCacheSize,
+  invalidateComputedCache
+} from "../src/expression";
+import { wireEventHandlers } from "../src/events";
 
 describe("Event Handling", () => {
   /**
@@ -88,5 +98,64 @@ describe("Event Handling", () => {
     const result = evalInScope("$event.outside && open && (open=false)", state, mockEvent);
     expect(result).toBe(false); // Returns false (the result of assignment)
     expect(state.open).toBe(false); // State should be modified
+  });
+});
+
+describe("DOM Event Wiring", () => {
+  test("onkeydown.escape.prevent.stop executes and filters by key", () => {
+    const root = document.createElement('div') as any;
+    root.setAttribute('onkeydown.escape.prevent.stop', 'close()');
+
+    const state: any = {
+      closed: false,
+      close() { state.closed = true; }
+    };
+
+    wireEventHandlers(root, state);
+    // keydown listeners are attached to document
+    const docListeners = (document as any).__getListeners?.('keydown') || [];
+    expect(docListeners.length).toBeGreaterThan(0);
+    const handler = docListeners[0] as any;
+
+    // Non-matching key: Enter
+    let prevent = false, stop = false;
+    handler({ key: 'Enter', preventDefault: () => { prevent = true; }, stopPropagation: () => { stop = true; }, target: root });
+    expect(state.closed).toBe(false);
+    expect(prevent).toBe(false);
+    expect(stop).toBe(false);
+
+    // Matching key: Escape
+    prevent = false; stop = false;
+    handler({ key: 'Escape', preventDefault: () => { prevent = true; }, stopPropagation: () => { stop = true; }, target: root });
+    expect(state.closed).toBe(true);
+    expect(prevent).toBe(true);
+    expect(stop).toBe(true);
+  });
+
+  test("$event.escape.prevent.stop && close() chaining works", () => {
+    const root = document.createElement('div') as any;
+    root.setAttribute('onkeydown', 'true');
+
+    const state: any = {};
+    wireEventHandlers(root, state);
+    const docListeners = (document as any).__getListeners?.('keydown') || [];
+    const handler = docListeners[0] as any;
+
+    // Just ensure the handler runs without error
+    expect(() => handler({ key: 'Escape', preventDefault: () => {}, stopPropagation: () => {}, target: root })).not.toThrow();
+  });
+
+  test("$event.outside is true for click and triggers close()", () => {
+    const root = document.createElement('div') as any;
+    root.setAttribute('onclick', '$event.outside && close()');
+
+    const state: any = { closed: false, close() { state.closed = true; } };
+    const listeners = wireEventHandlers(root, state);
+    const handler = listeners[0]!.handler as any;
+
+    // Use a target that is not the root, so outside evaluates true
+    const outsideTarget = document.createElement('div');
+    handler({ target: outsideTarget });
+    expect(state.closed).toBe(true);
   });
 });

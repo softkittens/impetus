@@ -265,10 +265,17 @@ class MockElement {
    * These are empty implementations since the tests
    * don't need to actually handle events.
    */
-  addEventListener() {}
-  removeEventListener() {}
+  private _listenersMap: Record<string, EventListener[]> = {};
+  addEventListener(event: string, handler: any) {
+    (this._listenersMap[event] || (this._listenersMap[event] = [])).push(handler as any);
+  }
+  removeEventListener(event: string, handler: any) {
+    const arr = this._listenersMap[event] || [];
+    this._listenersMap[event] = arr.filter(h => h !== handler);
+  }
+  __getListeners(event: string): EventListener[] { return this._listenersMap[event] || []; }
   dispatchEvent() {}
-  contains() { return false; }
+  contains(child: any) { return child === this; }
   scrollIntoView() {}
 }
 
@@ -317,6 +324,7 @@ class MockComment {
  */
 if (typeof document === 'undefined') {
   // Mock the document object with basic DOM creation methods
+  const __docListeners = new Map<string, EventListener[]>();
   global.document = {
     createElement: (tag: string) => {
       const element = new MockElement(tag);
@@ -338,6 +346,16 @@ if (typeof document === 'undefined') {
     querySelectorAll: () => [],
     querySelector: () => null,
     body: { appendChild: () => {} },
+    addEventListener: (event: string, handler: any) => {
+      const arr = __docListeners.get(event) || [];
+      arr.push(handler as any);
+      __docListeners.set(event, arr);
+    },
+    removeEventListener: (event: string, handler: any) => {
+      const arr = __docListeners.get(event) || [];
+      __docListeners.set(event, arr.filter(h => h !== handler));
+    },
+    __getListeners: (event: string) => __docListeners.get(event) || [],
   } as any;
   
   // Mock the window object with browser-specific classes

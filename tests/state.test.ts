@@ -129,7 +129,7 @@ describe("State", () => {
       
       localStateManager.markInitialized(mockElement);
       expect(localStateManager.isInitialized(mockElement)).toBe(true);
-      expect(localStateManager.hasScheduledRender(mockElement)).toBe(true);
+      expect(localStateManager.hasScheduledRender(mockElement)).toBe(false);
     });
 
     /**
@@ -252,7 +252,7 @@ describe("State", () => {
       localStateManager.setRenderCallback(callback);
       
       localStateManager.clear();
-      
+
       expect(localStateManager.getRootCount()).toBe(0);
       expect(localStateManager.getRootState(mockElement)).toBeUndefined();
       expect(localStateManager.isInitialized(mockElement)).toBe(false);

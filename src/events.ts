@@ -36,7 +36,7 @@ const listenerMap = new WeakMap<Element, EventHandler[]>(); // Maps component ro
  * WHY: Components need to respond to user interactions
  * This function finds all event attributes and sets up the appropriate handlers
  */
-export function wireEventHandlers(root: Element, state: Scope): void {
+export function wireEventHandlers(root: Element, state: Scope): EventHandler[] {
   const listeners: EventHandler[] = [];
   
   // Get all elements in this component (including the root)
@@ -92,6 +92,8 @@ export function wireEventHandlers(root: Element, state: Scope): void {
       hooks.onWireEvents(root, listeners.length);
     }
   } catch {}
+  
+  return listeners;
 }
 
 /**
@@ -178,8 +180,18 @@ function wireEventListeners(el: Element, state: Scope, root: Element, listeners:
       const event = parts[0] as string; // The actual event name
       const mods = new Set(parts.slice(1)); // Modifiers like prevent, stop, once
       
+      // Key alias filters via modifiers (e.g., onkeydown.escape)
+      const keyAliases: Record<string, string> = {
+        escape: 'Escape',
+        enter: 'Enter',
+        space: ' ',
+        tab: 'Tab',
+        backspace: 'Backspace'
+      };
+      const keyFilters = Array.from(mods).filter(m => m in keyAliases) as Array<keyof typeof keyAliases>;
+
       // Check if this event needs special handling
-      const needsOutside = (value || '').includes('$event.outside'); // Click outside detection
+      const needsOutside = (value || '').includes('$event.outside') || mods.has('outside'); // outside via value or modifier
       const isGlobalKey = event === 'keydown'; // Global keyboard events
       const target: EventTarget = (needsOutside || isGlobalKey) ? document : el;
       
@@ -189,6 +201,13 @@ function wireEventListeners(el: Element, state: Scope, root: Element, listeners:
        * This handler executes the event expression and handles modifiers
        */
       const handler = (ev: Event) => {
+        // Apply key filters first for keyboard events
+        if ((event === 'keydown' || event === 'keyup' || event === 'keypress') && keyFilters.length) {
+          const e = ev as KeyboardEvent;
+          const ok = keyFilters.some(k => e.key === keyAliases[k]);
+          if (!ok) return;
+        }
+
         // Apply event modifiers
         if (mods.has('prevent')) { try { ev.preventDefault(); } catch {} }
         if (mods.has('stop')) { try { ev.stopPropagation(); } catch {} }
@@ -203,9 +222,52 @@ function wireEventListeners(el: Element, state: Scope, root: Element, listeners:
           get(t, p) {
             // Special handling for $event.outside
             if (p === 'outside') {
-              // Returns true if click was outside the element that declared the handler
-              return !(el.contains(ev.target as Node));
+              // For focus transitions, use relatedTarget on focusout
+              const e: any = ev as any;
+              if (e && e.type === 'focusout') {
+                const next: Node | null = (e as FocusEvent).relatedTarget as any || null;
+                // If there's no next focus target, consider it outside
+                return !next || !el.contains(next);
+              }
+              // For focusin/click and others, use event target
+              const tgt: Node | null = (ev.target as any) || null;
+              return !tgt || !el.contains(tgt);
             }
+
+            // Chain helpers for key aliases: $event.escape.prevent.stop && close()
+            const keyAlias = (alias: string): boolean => {
+              const e = ev as KeyboardEvent;
+              switch (alias) {
+                case 'escape': return e.key === 'Escape';
+                case 'enter': return e.key === 'Enter';
+                case 'space': return e.key === ' ' || e.key === 'Spacebar';
+                case 'tab': return e.key === 'Tab';
+                case 'backspace': return e.key === 'Backspace';
+                default: return false;
+              }
+            };
+            const makeKeyChain = (ok: boolean) => {
+              const chainTarget = { ok } as any;
+              let chain: any;
+              chain = new Proxy(chainTarget, {
+                get(obj, prop) {
+                  if (prop === 'prevent') { if (ok) { try { ev.preventDefault(); } catch {} } return chain; }
+                  if (prop === 'stop') { if (ok) { try { ev.stopPropagation(); } catch {} } return ok; }
+                  if (prop === 'valueOf') return () => ok;
+                  if (prop === Symbol.toPrimitive) return (hint: any) => ok ? 1 : 0;
+                  return undefined;
+                }
+              });
+              return chain;
+            };
+            if (p === 'escape' || p === 'enter' || p === 'space' || p === 'tab' || p === 'backspace') {
+              return makeKeyChain(keyAlias(String(p)));
+            }
+
+            // One-off helpers: $event.prevent / $event.stop return true after side-effect
+            if (p === 'prevent') { try { ev.preventDefault(); } catch {} return true; }
+            if (p === 'stop') { try { ev.stopPropagation(); } catch {} return true; }
+
             // Normal property access with proper function binding
             // @ts-ignore - TypeScript doesn't know about event properties
             const v = (t as any)[p];
@@ -213,13 +275,23 @@ function wireEventListeners(el: Element, state: Scope, root: Element, listeners:
           }
         });
         
-        // Execute the event handler in component context (supports statements/multi-line)
-        execInScope(value, state, wrapped as any);
+        // Key filters for keyboard events
+        if ((event === 'keydown' || event === 'keyup' || event === 'keypress') && keyFilters.length) {
+          const e = ev as KeyboardEvent;
+          const ok = keyFilters.some(k => e.key === keyAliases[k]);
+          if (!ok) return;
+        }
+
+        // Execute the event expression in component context
+        const result = execInScope(value, state, wrapped as any);
         
         // Schedule a re-render in case the event changed state
         stateManager.scheduleRender(root);
         // Immediate render fallback to ensure visible updates
         try { getRenderBindings()(state, root); } catch {}
+        
+        // Return the result for testing (optional)
+        return result;
       };
       
       /**

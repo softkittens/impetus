@@ -148,8 +148,11 @@ Text + attributes
 Events and $event
 ```html
 <input :value="name" />
-<button onclick="(count++)">Clicked {count}</button>
-<div onclick="open=false" onkeydown="($event.key==='Escape') && (open=false)"></div>
+<button onclick="count++">Clicked {count}</button>
+<div 
+  onclick="$event.outside && (open=false)" 
+  onfocusout="$event.outside && (open=false)" 
+  onkeydown="$event.escape.prevent.stop && (open=false)"></div>
 ```
 
 Conditional display
@@ -235,7 +238,7 @@ Or import explicitly:
 ```
 
 ### One‑Minute Examples
-- **Outside click + Escape:** use `$event.outside` and `$event.key==='Escape'` in inline handlers.
+- **Outside click + Escape + focus-out:** use `$event.outside` on `click` and `focusout`, and `$event.escape.prevent.stop` on `keydown`.
 - **Two‑way input:** `:value="path"` (events wired automatically).
 - **Conditional blocks:** `@if` / `@else` for DOM add/remove; `@show` for toggling visibility.
 - **Computed bits:** rely on expression caching within a render pass.
@@ -268,8 +271,12 @@ Event modifiers
 
 Events
 - Inline: `onclick="count++"`, `oninput="name=$event.target.value"`.
-- `$event` is a safe proxy (methods bound), plus `$event.outside` boolean for outside-click use.
-- `keydown` listeners are attached on `document` for consistent keyboard behavior; `$event.outside` also uses `document`.
+- `$event` helpers:
+  - `$event.outside` for boundary checks on the element the handler is bound to.
+    - Works for `click` and focus transitions. For `focusout`, it uses `relatedTarget` and treats `null` as outside.
+  - Key alias helpers: `$event.escape`, `$event.enter`, `$event.space`, `$event.tab`, `$event.backspace`.
+    - Chain `.prevent.stop` and use with `&&` in expressions, e.g. `$event.escape.prevent.stop && close()`.
+- `keydown` listeners are attached on `document` for consistent keyboard behavior; outside listeners also use `document` when needed.
 
 Directives
 - `@if="expr"` / `@else` – conditional insert/remove (paired siblings).
@@ -282,6 +289,7 @@ Directives
 Transitions
 - Apply to `@show` blocks via `@transition` (currently `fade[:durationMs]`).
   - Example: `<div @show="open" @transition="fade:200">...</div>`.
+  - Concurrency-safe: rapid toggles won’t leave elements hidden incorrectly; transitions are versioned per element.
 
 Two-way model (shorthand)
 - `:value="path"` marks element as model-bound; runtime wires appropriate events and assigns back into scope.
