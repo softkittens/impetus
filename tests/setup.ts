@@ -13,6 +13,8 @@
 // Import testing utilities from Bun's test framework
 import { expect, test, describe, beforeEach, afterEach, beforeAll, afterAll, spyOn } from "bun:test";
 
+const templateRegistry = new Map<string, any>();
+
 /**
  * Mock DOM Element class
  * 
@@ -332,27 +334,7 @@ if (typeof document === 'undefined') {
     createTextNode: (text: string) => new MockText(text),
     createComment: (text: string) => new MockComment(text),
     createDocumentFragment: () => new MockElement('div'), // Simple mock
-    getElementById: (id: string) => {
-      // Simple mock that returns a template element if id matches
-      if (id === 'prop-template' || id === 'priority-template') {
-        const template = new MockElement('template') as any;
-        template.id = id;
-        template.tagName = 'TEMPLATE';
-        template.content = {
-          children: [],
-          appendChild: (child: any) => {
-            template.content.children.push(child);
-          },
-          cloneNode: () => {
-            const div = new MockElement('div');
-            div.className = 'from-attribute';
-            return div;
-          }
-        };
-        return template;
-      }
-      return null;
-    },
+    getElementById: () => null,
     querySelectorAll: () => [],
     querySelector: () => null,
     body: { appendChild: () => {} },
@@ -406,10 +388,100 @@ if (typeof document === 'undefined') {
   global.HTMLTemplateElement = global.window.HTMLTemplateElement as any;
 }
 
+const originalGetElementById = document.getElementById?.bind(document);
+(document as any).getElementById = (id: string) => {
+  if (templateRegistry.has(id)) {
+    return templateRegistry.get(id);
+  }
+  return originalGetElementById ? originalGetElementById(id) : null;
+};
+
+if (!(global as any).window.makeReactive) {
+  (global as any).window.makeReactive = (obj: any, element: Element, isRoot?: boolean) => {
+    return new Proxy(obj, {
+      set(target, prop, value) {
+        target[prop as any] = value;
+        if (isRoot) {
+          setTimeout(() => {
+            (global as any).window.renderBindings?.(target, element);
+          }, 0);
+        }
+        return true;
+      }
+    });
+  };
+}
+
+if (!(global as any).window.collectBindingsForRoot) {
+  (global as any).window.collectBindingsForRoot = () => {};
+}
+
+if (!(global as any).window.renderBindings) {
+  (global as any).window.renderBindings = () => {};
+}
+
+if (!(global as any).window.wireEventHandlers) {
+  (global as any).window.wireEventHandlers = () => {};
+}
+
+if (!(global as any).window.devhooks) {
+  (global as any).window.devhooks = { onInitRoot: () => {} };
+}
+
+export function createGlobalComponent(name: string, classDef: any) {
+  (globalThis as any)[name] = classDef;
+  (global as any).window[name] = classDef;
+}
+
+export function mountHost(componentName: string, attrs: Record<string, string | number> = {}) {
+  const host = document.createElement('div') as any;
+  host.setAttribute('use', componentName);
+  for (const [key, value] of Object.entries(attrs)) {
+    host.setAttribute(key, String(value));
+  }
+  (document.body as any)?.appendChild?.(host);
+  return host;
+}
+
+export function registerTemplate(id: string, nodeFactory: () => Element | null = () => document.createElement('div')) {
+  const template = document.createElement('template') as any;
+  template.id = id;
+  template.tagName = 'TEMPLATE';
+  template.content = {
+    children: [],
+    appendChild: (child: any) => {
+      template.content.children.push(child);
+    },
+    cloneNode: () => nodeFactory()?.cloneNode?.(true) ?? nodeFactory()
+  };
+  templateRegistry.set(id, template);
+  return template;
+}
+
+export const flushMicrotasks = () => new Promise(resolve => setTimeout(resolve, 0));
+
+export function withConsoleSpies() {
+  const warn = spyOn(console, 'warn').mockImplementation(() => {});
+  const error = spyOn(console, 'error').mockImplementation(() => {});
+  return () => {
+    warn.mockRestore();
+    error.mockRestore();
+  };
+}
+
 /**
  * Export testing utilities for use in test files
  * 
  * This centralizes all test imports in one place, making it easier
  * to manage dependencies and switch test frameworks if needed.
  */
-export { expect, test, describe, beforeEach, afterEach, beforeAll, afterAll, spyOn };
+export {
+  expect,
+  test,
+  describe,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  afterAll,
+  spyOn
+};

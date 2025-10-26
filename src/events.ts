@@ -13,6 +13,8 @@
 
 import type { Scope, EventHandler } from './types';
 import { evalInScope, assignInScope } from './expression';
+import { stateManager } from './state';
+import { getDevtoolsHooks } from './devtools-hooks';
 
 /**
  * EVENT LISTENER STORAGE
@@ -46,7 +48,7 @@ export function wireEventHandlers(root: Element, state: Scope): void {
      * If an element has its own state (is a child component),
      * don't wire events for it - it handles its own events
      */
-    const mapped = (window as any).stateManager?.getRootState?.(el);
+    const mapped = stateManager.getRootState(el);
     if (mapped && mapped !== state && el !== root) {
       return; // Child element managed by different scope
     }
@@ -83,7 +85,12 @@ export function wireEventHandlers(root: Element, state: Scope): void {
   if (listeners.length) listenerMap.set(root, listeners);
   
   // Notify devtools about event wiring
-  try { (window as any).devhooks?.onWireEvents?.(root, listeners.length); } catch {}
+  try {
+    const hooks = getDevtoolsHooks();
+    if (hooks && typeof hooks.onWireEvents === 'function') {
+      hooks.onWireEvents(root, listeners.length);
+    }
+  } catch {}
 }
 
 /**
@@ -134,7 +141,7 @@ function wireModelBinding(el: Element, state: Scope, root: Element, listeners: E
     assignInScope(path, state, newValue);
     
     // Schedule a re-render to update the UI
-    (window as any).stateManager?.scheduleRender?.(root);
+    stateManager.scheduleRender(root);
   };
   
   // Add the event listener
@@ -209,7 +216,7 @@ function wireEventListeners(el: Element, state: Scope, root: Element, listeners:
         evalInScope(value, state, wrapped as any);
         
         // Schedule a re-render in case the event changed state
-        (window as any).stateManager?.scheduleRender?.(root);
+        stateManager.scheduleRender(root);
       };
       
       /**

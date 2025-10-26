@@ -14,7 +14,7 @@
  * - Proxy utility functions
  */
 
-import { expect, test, describe, beforeEach, afterEach, spyOn } from "./setup";
+import { expect, test, describe, beforeEach, afterEach, spyOn, flushMicrotasks } from "./setup";
 import { StateManager, makeReactive, isReactiveProxy, getProxyRoots, stateManager } from "../src/state";
 
 describe("State", () => {
@@ -430,7 +430,7 @@ describe("makeReactive", () => {
     proxy.count = 10;
     
     // Wait for microtask
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await flushMicrotasks();
     expect(callbackCalled).toBe(true);
   });
 
@@ -454,7 +454,7 @@ describe("makeReactive", () => {
     delete (proxy as any).name;
     
     // Wait for microtask
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await flushMicrotasks();
     expect(callbackCalled).toBe(true);
   });
 
@@ -478,7 +478,7 @@ describe("makeReactive", () => {
     proxy.push(4);
     
     // Wait for microtask
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await flushMicrotasks();
     expect(callbackCalled).toBe(true);
     expect((arr as any).length).toBe(4);
   });

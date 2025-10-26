@@ -338,10 +338,13 @@ export function parseProps(host: Element): Record<string, any> {
  */
 export function parseEachExpression(expr: string): { listExpr: string; itemKey: string; idxKey: string } {
   const match = expr.match(/^(.*?)(?:\s+as\s+([a-zA-Z_$][\w$]*)(?:\s*,\s*([a-zA-Z_$][\w$]*))?)?$/);
+  const listExpr = match && match[1] ? match[1] : expr;
+  const itemKey = match && match[2] ? match[2] : 'item';
+  const idxKey = match && match[3] ? match[3] : 'i';
   return {
-    listExpr: (match?.[1] || expr).trim(),
-    itemKey: (match?.[2] || 'item').trim(),
-    idxKey: (match?.[3] || 'i').trim()
+    listExpr: listExpr.trim(),
+    itemKey: itemKey.trim(),
+    idxKey: idxKey.trim()
   };
 }
 
@@ -408,9 +411,10 @@ export function setValueProp(el: Element, value: any): void {
  * // If element is the span, this returns true
  */
 export function isInsideEachTemplate(element: Element | null): boolean {
-  let current = element?.parentElement || null;
+  let current = element ? element.parentElement : null;
   while (current) {
-    if (current.hasAttribute?.('s-each') || current.hasAttribute?.('@each')) {
+    const hasAttr = typeof current.hasAttribute === 'function' ? current.hasAttribute.bind(current) : null;
+    if (hasAttr && (hasAttr('s-each') || hasAttr('@each'))) {
       return true;
     }
     current = current.parentElement;

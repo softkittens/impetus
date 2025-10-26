@@ -14,7 +14,7 @@
  * - Cache management utilities
  */
 
-import { expect, test, describe, beforeEach, afterEach, spyOn } from "./setup";
+import { expect, test, describe, beforeEach, afterEach, withConsoleSpies } from "./setup";
 import { 
   compile, 
   evalInScope, 
@@ -37,29 +37,14 @@ describe("Expression", () => {
     clearExpressionCache();
   });
 
-  let consoleWarnSpy: any;
-  let consoleErrorSpy: any;
+  let restoreConsole: () => void;
 
-  /**
-   * Set up console spies before each test
-   * 
-   * This allows us to verify that error messages are logged
-   * when expressions fail to evaluate.
-   */
   beforeEach(() => {
-    consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-    consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    restoreConsole = withConsoleSpies();
   });
 
-  /**
-   * Restore console spies after each test
-   * 
-   * This cleans up after the test and prevents
-   * interference with other tests.
-   */
   afterEach(() => {
-    consoleWarnSpy.mockRestore();
-    consoleErrorSpy.mockRestore();
+    restoreConsole();
   });
 
   describe("compile", () => {
@@ -142,10 +127,10 @@ describe("Expression", () => {
       const state = { count: 5 };
       
       expect(evalInScope("missing", state)).toBe(undefined);
-      expect(consoleWarnSpy).toHaveBeenCalledWith("impetus: eval error", "missing", expect.any(ReferenceError));
+      expect(console.warn).toHaveBeenCalledWith("impetus: eval error", "missing", expect.any(ReferenceError));
       
       expect(evalInScope("missing.prop", state)).toBe(undefined);
-      expect(consoleWarnSpy).toHaveBeenCalledWith("impetus: eval error", "missing.prop", expect.any(ReferenceError));
+      expect(console.warn).toHaveBeenCalledWith("impetus: eval error", "missing.prop", expect.any(ReferenceError));
     });
 
     /**
@@ -158,10 +143,10 @@ describe("Expression", () => {
       const state = {};
       
       expect(evalInScope("invalid syntax !!!", state)).toBe(undefined);
-      expect(consoleWarnSpy).toHaveBeenCalledWith("impetus: eval error", "invalid syntax !!!", expect.any(SyntaxError));
+      expect(console.warn).toHaveBeenCalledWith("impetus: eval error", "invalid syntax !!!", expect.any(SyntaxError));
       
       expect(evalInScope("(() => { throw new Error('test') })()", state)).toBe(undefined);
-      expect(consoleWarnSpy).toHaveBeenCalledWith("impetus: eval error", "(() => { throw new Error('test') })()", expect.any(Error));
+      expect(console.warn).toHaveBeenCalledWith("impetus: eval error", "(() => { throw new Error('test') })()", expect.any(Error));
     });
 
     /**

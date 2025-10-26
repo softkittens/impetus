@@ -72,7 +72,10 @@ export class StateManager {
         
         // Call the main render function to update the DOM
         // WHY: This is injected from index.ts to avoid circular imports
-        (this as any).renderBindings?.(state, root);
+        const renderer = (this as any).renderBindings;
+        if (typeof renderer === 'function') {
+          renderer(state, root);
+        }
       }
     });
   }

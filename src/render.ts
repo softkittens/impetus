@@ -16,6 +16,7 @@ import { evalInScope, invalidateComputedCache } from './expression';
 import { unwrapExpr } from './utils';
 import { DIRECTIVES, PLACEHOLDERS } from './constants';
 import { directiveHandlers } from './directives';
+import { getDevtoolsHooks } from './devtools-hooks';
 import { attrHandlers, handleGenericAttribute } from './attributes';
 import { getAttributeBindings, getInterpolationBindings } from './bindings';
 
@@ -32,7 +33,15 @@ import { getAttributeBindings, getInterpolationBindings } from './bindings';
  */
 export function renderBindings(state: Scope, root: Element): void {
   // Notify devtools that rendering is starting
-  try { (window as any).devhooks?.onRenderStart?.(root); } catch {}
+  const hooks = getDevtoolsHooks();
+  try {
+    if (hooks && typeof hooks.onRenderStart === 'function') {
+      hooks.onRenderStart(root);
+    }
+  } catch {}
+  const start = (typeof performance !== 'undefined' && performance.now)
+    ? performance.now()
+    : Date.now();
   
   // STEP 1: Update all attribute bindings
   // This includes things like class, style, disabled, etc.
@@ -43,7 +52,14 @@ export function renderBindings(state: Scope, root: Element): void {
   renderTextInterpolations(state, root);
   
   // Notify devtools that rendering is finished
-  try { (window as any).devhooks?.onRenderEnd?.(root); } catch {}
+  const end = (typeof performance !== 'undefined' && performance.now)
+    ? performance.now()
+    : Date.now();
+  try {
+    if (hooks && typeof hooks.onRenderEnd === 'function') {
+      hooks.onRenderEnd(root, { duration: end - start });
+    }
+  } catch {}
 }
 
 /**
@@ -125,11 +141,19 @@ function handleDirective(el: Element, attrName: string, expr: string, state: Sco
   // Handle structural and visibility directives
   if (DIRECTIVES.IF.has(attrName) || DIRECTIVES.SHOW.has(attrName) || DIRECTIVES.EACH.has(attrName)) {
     // Notify devtools about directive execution
-    try { (window as any).devhooks?.onDirective?.(el, attrName, { expr }); } catch {}
+    const hooks = getDevtoolsHooks();
+    try {
+      if (hooks && typeof hooks.onDirective === 'function') {
+        hooks.onDirective(el, attrName, { expr });
+      }
+    } catch {}
     
     // Execute the directive handler
     // WHY: Each directive has its own logic for manipulating the DOM
-    directiveHandlers[attrName]?.(el, expr, state, attrName === '@show' ? undefined : root);
+    const handler = directiveHandlers[attrName];
+    if (typeof handler === 'function') {
+      handler(el, expr, state, attrName === '@show' ? undefined : root);
+    }
     return true;
   }
   

@@ -26,36 +26,9 @@ import { renderBindings } from './render';      // Updates the DOM when data cha
 import { wireEventHandlers, removeEventListeners } from './events';   // Handles user interactions (clicks, inputs)
 import { mountComponent, destroyComponent } from './components';     // Manages component lifecycle
 import { applyTransition } from './transitions'; // Handles animations and transitions
-
-/**
- * DEVTOOLS INTEGRATION
- * 
- * WHY: We need hooks for devtools but don't want to break the app if devtools aren't loaded
- * This pattern provides "graceful degradation" - the app works with or without devtools
- */
-// Devtools hooks - stubs when devtools not loaded
-let devhooks: any = undefined;
-
-/**
- * Sets up devtools hooks if devtools are available
- * @param hooks - Object containing devtools callback functions
- * 
- * WHY: Allows devtools to hook into framework lifecycle events
- * This enables debugging and inspection capabilities
- */
-export function setDevtoolsHooks(hooks: any): void {
-  devhooks = Object.assign({}, devhooks, hooks);
-}
-
-/**
- * Gets the current devtools hooks
- * @returns The devtools hooks object or undefined
- * 
- * WHY: Provides access to devtools functionality throughout the framework
- */
-export function getDevtoolsHooks(): any {
-  return devhooks;
-}
+import { registerRuntimeApi, getRenderBindings, getWireEventHandlers, getDestroy, getMountComponent } from './runtime-api';
+import { setDevtoolsHooks, getDevtoolsHooks } from './devtools-hooks';
+export { setDevtoolsHooks, getDevtoolsHooks };
 
 /**
  * STUB FUNCTIONS FOR DEVTOOLS
@@ -70,56 +43,18 @@ export function __dev_get_bindings(root: Element): { attrs: any[]; interps: any[
 }
 
 /**
- * GLOBAL API SETUP
- * 
- * WHY: We expose core functions globally for two reasons:
- * 1. External code can access Impetus functionality
- * 2. Different modules can communicate without circular imports
- * 
- * This is like creating a "public API" for the framework
- */
-const impetus = {
-  stateManager,        // Manages state for all components
-  makeReactive,        // Creates reactive objects
-  evalInScope,         // Evaluates expressions in component context
-  init,               // Initializes the framework
-  destroy,            // Cleans up components
-  mountComponent,     // Mounts component instances
-  applyTransition,    // Applies animations
-  renderBindings,     // Renders data to DOM
-  devhooks: getDevtoolsHooks() // Devtools integration
-};
-
-// Make impetus available globally (window.impetus)
-// WHY: Allows external access and enables debugging from browser console
-(window as any).impetus = impetus;
-
-/**
- * LEGACY GLOBAL REFERENCES
- * 
- * WHY: These maintain backward compatibility with older code
- * Some parts of the framework still reference these globals directly
- * 
- * NOTE: In a perfect world, we'd use only the impetus object above
- * But we keep these for compatibility with existing code
- */
-(window as any).stateManager = stateManager;
-(window as any).makeReactive = makeReactive;
-(window as any).collectBindingsForRoot = collectBindingsForRoot;
-(window as any).renderBindings = renderBindings;
-(window as any).wireEventHandlers = wireEventHandlers;
-(window as any).mountComponent = mountComponent;
-(window as any).destroy = destroy;
-(window as any).applyTransition = applyTransition;
-(window as any).devhooks = getDevtoolsHooks();
-
-/**
  * CIRCULAR DEPENDENCY FIX
  * 
  * WHY: stateManager needs renderBindings, but renderBindings needs stateManager
  * This creates a circular import problem. We solve it by injecting the function
  * after both modules are loaded.
  */
+registerRuntimeApi({
+  renderBindings,
+  wireEventHandlers,
+  destroy,
+  mountComponent,
+});
 (stateManager as any).renderBindings = renderBindings;
 
 /**
@@ -176,7 +111,12 @@ function setupScope(root: Element): void {
   } catch {} // Silently fail if store setup fails
   
   // STEP 5: Notify devtools that a component was initialized
-  try { getDevtoolsHooks()?.onInitRoot?.(root, state); } catch {}
+  const hooks = getDevtoolsHooks();
+  try {
+    if (hooks && typeof hooks.onInitRoot === 'function') {
+      hooks.onInitRoot(root, state);
+    }
+  } catch {}
   
   // STEP 6: Register the component with the state manager
   // WHY: The state manager needs to track all active components
@@ -186,16 +126,16 @@ function setupScope(root: Element): void {
   // WHY: We need to know where data is used in the template
   // This includes things like {name} in text or attr="value" in attributes
   collectBindingsForRoot(root);
-
+  
   // STEP 8: Perform initial render
   // WHY: Render the component with its initial data
   // This displays the component in its initial state
-  renderBindings(state, root);
-
+  getRenderBindings()(state, root);
+  
   // STEP 9: Setup event handlers
   // WHY: Handle user interactions like clicks, form inputs, etc.
   // This makes the component interactive
-  wireEventHandlers(root, state);
+  getWireEventHandlers()(root, state);
 }
 
 /**
@@ -257,7 +197,12 @@ export function destroy(root: Element): void {
   destroyComponent(root);
   
   // STEP 4: Notify devtools that component was destroyed
-  try { getDevtoolsHooks()?.onDestroy?.(root); } catch {}
+  const hooks = getDevtoolsHooks();
+  try {
+    if (hooks && typeof hooks.onDestroy === 'function') {
+      hooks.onDestroy(root);
+    }
+  } catch {}
 }
 
 /**

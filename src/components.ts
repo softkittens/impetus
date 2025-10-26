@@ -14,7 +14,11 @@
 import type { Scope } from './types';
 import { resolveCtor } from './expression';
 import { parseProps } from './utils';
-import { stateManager } from './state';
+import { stateManager, makeReactive } from './state';
+import { collectBindingsForRoot } from './bindings';
+import { renderBindings } from './render';
+import { wireEventHandlers } from './events';
+import { getDevtoolsHooks } from './devtools-hooks';
 
 /**
  * COMPONENT INSTANCE TRACKING
@@ -119,7 +123,7 @@ export function mountComponent(host: Element, className: string, inherit: boolea
    * This allows components to share data across the entire app
    */
   try { 
-    (instance as any).$store = (window as any).makeReactive?.(
+    (instance as any).$store = makeReactive(
       (globalThis as any).__impetusStore || ((globalThis as any).__impetusStore = {}), 
       host
     ); 
@@ -130,14 +134,19 @@ export function mountComponent(host: Element, className: string, inherit: boolea
    * 
    * Make the component instance reactive so UI updates when state changes
    */
-  const reactive = (window as any).makeReactive?.(instance, host, true);
+  const reactive = makeReactive(instance, host, true);
   stateManager.setRootState(host, reactive);
   
   // Store the original instance for lifecycle methods (non-inherited components only)
   if (!inherit) componentInstance.set(host, instance);
   
   // Notify devtools about component initialization
-  try { (window as any).devhooks?.onInitRoot?.(host, reactive); } catch {}
+  try {
+    const hooks = getDevtoolsHooks();
+    if (hooks && typeof hooks.onInitRoot === 'function') {
+      hooks.onInitRoot(host, reactive);
+    }
+  } catch {}
   
   // Register the component with the state manager
   stateManager.addRoot(host);
@@ -153,18 +162,19 @@ export function mountComponent(host: Element, className: string, inherit: boolea
    */
   
   // STEP 1: Find and track all data bindings in the template
-  (window as any).collectBindingsForRoot?.(host);
+  collectBindingsForRoot(host);
   
   // STEP 2: Render the component with its initial state
-  (window as any).renderBindings?.(reactive, host);
+  renderBindings(reactive, host);
   
   // STEP 3: Set up event handlers for user interactions
-  (window as any).wireEventHandlers?.(host, reactive);
+  wireEventHandlers(host, reactive);
   
   // STEP 4: Call the component's onMount lifecycle hook
   if (!inherit) { 
     try { 
-      instance?.onMount?.call(reactive, host); 
+      const mountFn = instance && typeof instance.onMount === 'function' ? instance.onMount : null;
+      if (mountFn) mountFn.call(reactive, host);
     } catch {} 
   }
 }
@@ -221,7 +231,9 @@ function resolveTemplate(host: Element, ctor: any, instance: any): void {
     } else {
       // Fallback to static/instance properties (deprecated)
       const staticTpl = (ctor as any).template;
-      const instTpl = instance?.template;
+      const instTpl = instance && typeof (instance as any).template !== 'undefined'
+        ? (instance as any).template
+        : undefined;
       const fallbackTplId = staticTpl || instTpl;
       
       if (fallbackTplId) {
@@ -275,7 +287,10 @@ export function getComponentInstance(host: Element): any {
 export function destroyComponent(host: Element): void {
   // Call the component's onDestroy lifecycle hook
   try { 
-    (componentInstance.get(host) as any)?.onDestroy?.(); 
+    const inst = componentInstance.get(host) as any;
+    if (inst && typeof inst.onDestroy === 'function') {
+      inst.onDestroy();
+    }
   } catch {} // Silently ignore errors in onDestroy
   
   // Clean up tracking data

@@ -9,58 +9,9 @@
  * - Component destruction and cleanup
  */
 
-import { describe, test, expect, beforeEach, afterEach } from '../tests/setup';
+import { describe, test, expect, beforeEach, afterEach, createGlobalComponent, mountHost, registerTemplate } from './setup';
 import { mountComponent, destroyComponent, isComponentInitialized, getComponentInstance } from '../src/components';
 import { stateManager } from '../src/state';
-
-// Type declarations for test environment
-declare global {
-  interface Window {
-    makeReactive: (obj: any, element: Element, isRoot?: boolean) => any;
-    collectBindingsForRoot: (element: Element) => void;
-    renderBindings: (state: any, element: Element) => void;
-    wireEventHandlers: (element: Element, state: any) => void;
-    devhooks: { onInitRoot: (element: Element, state: any) => void };
-    [key: string]: any;
-  }
-}
-
-// Mock global functions that components expect
-global.window.makeReactive = (obj: any, element: Element, isRoot?: boolean) => {
-  return new Proxy(obj, {
-    set(target, prop, value) {
-      target[prop] = value;
-      // Mock render scheduling
-      if (isRoot) {
-        setTimeout(() => {
-          global.window.renderBindings?.(target, element);
-        }, 0);
-      }
-      return true;
-    }
-  });
-};
-
-global.window.collectBindingsForRoot = () => {};
-global.window.renderBindings = () => {};
-global.window.wireEventHandlers = () => {};
-global.window.devhooks = { onInitRoot: () => {} };
-
-// Helper function to create and expose component class globally
-function createComponent(name: string, classDef: any) {
-  (globalThis as any)[name] = classDef;
-  (global.window as any)[name] = classDef;
-}
-
-function mountHost(componentName: string, attrs: Record<string, string | number> = {}) {
-  const host = document.createElement('div');
-  host.setAttribute('use', componentName);
-  for (const [key, value] of Object.entries(attrs)) {
-    host.setAttribute(key, String(value));
-  }
-  document.body.appendChild(host);
-  return host;
-}
 
 describe('Component System', () => {
   beforeEach(() => {
@@ -87,7 +38,7 @@ describe('Component System', () => {
       }
       
       // Make the class available globally
-      createComponent('TestComponent', TestComponent);
+      createGlobalComponent('TestComponent', TestComponent);
       
       // Create host element
       const host = mountHost('TestComponent');
@@ -112,7 +63,7 @@ describe('Component System', () => {
         }
       }
       
-      createComponent('PropsComponent', PropsComponent);
+      createGlobalComponent('PropsComponent', PropsComponent);
       
       const host = mountHost('PropsComponent', { 'data-test': 'value', max: '10' });
       
@@ -130,7 +81,7 @@ describe('Component System', () => {
         name = 'Inline Test';
       }
       
-      createComponent('InlineComponent', InlineComponent);
+      createGlobalComponent('InlineComponent', InlineComponent);
       
       const host = mountHost('InlineComponent');
       
@@ -156,7 +107,7 @@ describe('Component System', () => {
         message = 'Empty';
       }
       
-      createComponent('EmptyComponent', EmptyComponent);
+      createGlobalComponent('EmptyComponent', EmptyComponent);
       
       const host = mountHost('EmptyComponent');
       
@@ -174,13 +125,13 @@ describe('Component System', () => {
         title = 'From Prop Template';
       }
       
-      createComponent('PropTemplateComponent', PropTemplateComponent);
+      createGlobalComponent('PropTemplateComponent', PropTemplateComponent);
       
-      // Create a template element
-      const template = document.createElement('template') as any;
-      template.id = 'prop-template';
-      template.content = { cloneNode: () => document.createElement('div') };
-      document.body.appendChild(template);
+      registerTemplate('prop-template', () => {
+        const div = document.createElement('div');
+        div.className = 'from-prop-template';
+        return div;
+      });
       
       // Create host with template prop
       const host = mountHost('PropTemplateComponent', { template: 'prop-template' });
@@ -196,7 +147,7 @@ describe('Component System', () => {
         message = 'Missing';
       }
       
-      createComponent('MissingTemplateComponent', MissingTemplateComponent);
+      createGlobalComponent('MissingTemplateComponent', MissingTemplateComponent);
       
       const host = mountHost('MissingTemplateComponent', { template: 'non-existent-template' });
       
@@ -222,17 +173,13 @@ describe('Component System', () => {
         text = 'Priority Test';
       }
       
-      createComponent('PriorityComponent', PriorityComponent);
+      createGlobalComponent('PriorityComponent', PriorityComponent);
       
-      // Create template
-      const template = document.createElement('template') as any;
-      template.id = 'priority-template';
-      template.content = { cloneNode: () => {
+      registerTemplate('priority-template', () => {
         const div = document.createElement('div');
         div.className = 'from-attribute';
         return div;
-      }};
-      document.body.appendChild(template);
+      });
       
       // Create host with both inline content and template attribute
       const host = mountHost('PriorityComponent', { template: 'priority-template' });
@@ -257,7 +204,7 @@ describe('Component System', () => {
         }
       }
       
-      createComponent('DestructibleComponent', DestructibleComponent);
+      createGlobalComponent('DestructibleComponent', DestructibleComponent);
       
       const host = mountHost('DestructibleComponent');
       
@@ -284,8 +231,8 @@ describe('Component System', () => {
         childData = 'child value';
       }
       
-      createComponent('ParentComponent', ParentComponent);
-      createComponent('ChildComponent', ChildComponent);
+      createGlobalComponent('ParentComponent', ParentComponent);
+      createGlobalComponent('ChildComponent', ChildComponent);
       
       // Create parent
       const parent = document.createElement('div');
@@ -296,7 +243,7 @@ describe('Component System', () => {
       // Create child with inherit
       const child = document.createElement('div');
       child.setAttribute('use', 'ChildComponent');
-      child.setAttribute('inherit');
+      child.setAttribute('inherit', '');
       parent.appendChild(child);
       mountComponent(child, 'ChildComponent', true);
       

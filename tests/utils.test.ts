@@ -44,24 +44,18 @@ describe("Utils", () => {
      * This is the most common use case - converting HTML attribute names
      * to JavaScript property names.
      */
-    test("converts kebab-case to camelCase", () => {
-      expect(toCamel("hello-world")).toBe("helloWorld");
-      expect(toCamel("data-user-id")).toBe("dataUserId");
-      expect(toCamel("aria-label")).toBe("ariaLabel");
-      expect(toCamel("single")).toBe("single");
-      expect(toCamel("")).toBe("");
-    });
-
-    /**
-     * Test edge cases that might break naive implementations
-     * 
-     * These tests ensure the function handles unusual inputs gracefully.
-     */
-    test("handles edge cases", () => {
-      expect(toCamel("camelCase")).toBe("camelCase");
-      expect(toCamel("multiple--dashes")).toBe("multipleDashes");
-      expect(toCamel("trailing-")).toBe("trailing");
-      expect(toCamel("-leading")).toBe("Leading");
+    test.each([
+      ["hello-world", "helloWorld"],
+      ["data-user-id", "dataUserId"],
+      ["aria-label", "ariaLabel"],
+      ["single", "single"],
+      ["", ""],
+      ["camelCase", "camelCase"],
+      ["multiple--dashes", "multipleDashes"],
+      ["trailing-", "trailing"],
+      ["-leading", "Leading"]
+    ])("toCamel(%s)", (input, expected) => {
+      expect(toCamel(input)).toBe(expected);
     });
   });
 
@@ -72,23 +66,17 @@ describe("Utils", () => {
      * This is used when converting JavaScript property names to CSS names.
      * The improved implementation handles consecutive uppercase letters.
      */
-    test("converts camelCase to kebab-case", () => {
-      expect(toKebab("helloWorld")).toBe("hello-world");
-      expect(toKebab("userId")).toBe("user-id");
-      expect(toKebab("HTMLElement")).toBe("html-element"); // Improved: handles consecutive uppercase letters
-      expect(toKebab("single")).toBe("single");
-      expect(toKebab("")).toBe("");
-    });
-
-    /**
-     * Test edge cases including acronyms and numbers
-     * 
-     * These ensure the function works with real-world property names.
-     */
-    test("handles edge cases", () => {
-      expect(toKebab("kebab-case")).toBe("kebab-case");
-      expect(toKebab("test123Value")).toBe("test123-value");
-      expect(toKebab("XMLHttpRequest")).toBe("xml-http-request");
+    test.each([
+      ["helloWorld", "hello-world"],
+      ["userId", "user-id"],
+      ["HTMLElement", "html-element"],
+      ["single", "single"],
+      ["", ""],
+      ["kebab-case", "kebab-case"],
+      ["test123Value", "test123-value"],
+      ["XMLHttpRequest", "xml-http-request"]
+    ])("toKebab(%s)", (input, expected) => {
+      expect(toKebab(input)).toBe(expected);
     });
   });
 
@@ -99,28 +87,22 @@ describe("Utils", () => {
      * HTML attributes are always strings, but we need them as proper types.
      * The order of checks is important to avoid false positives.
      */
-    test("coerces string values to appropriate types", () => {
-      expect(coerce("true")).toBe(true);
-      expect(coerce("false")).toBe(false);
-      expect(coerce("null")).toBe(null);
-      expect(coerce("undefined")).toBe(undefined);
-      expect(coerce("123")).toBe(123);
-      expect(coerce("12.34")).toBe(12.34);
-      expect(coerce("0")).toBe(0);
-      expect(coerce("")).toBe("");
-      expect(coerce("hello")).toBe("hello");
-      expect(coerce("  123  ")).toBe(123);
-    });
-
-    /**
-     * Test edge cases that might confuse the coercion logic
-     * 
-     * These ensure the function handles whitespace and negative numbers.
-     */
-    test("handles edge cases", () => {
-      expect(coerce("   ")).toBe("   ");
-      expect(coerce("-42")).toBe(-42);
-      expect(coerce("3.14")).toBe(3.14);
+    test.each([
+      ["true", true],
+      ["false", false],
+      ["null", null],
+      ["undefined", undefined],
+      ["123", 123],
+      ["12.34", 12.34],
+      ["0", 0],
+      ["", ""],
+      ["hello", "hello"],
+      ["  123  ", 123],
+      ["   ", "   "],
+      ["-42", -42],
+      ["3.14", 3.14]
+    ])("coerce('%s')", (input, expected) => {
+      expect(coerce(input)).toBe(expected);
     });
   });
 

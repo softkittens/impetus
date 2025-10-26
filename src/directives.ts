@@ -2,6 +2,10 @@ import type { Scope, DirectiveHandler } from './types';
 import { evalInScope } from './expression';
 import { parseEachExpression, findElseSibling } from './utils';
 import { DIRECTIVES } from './constants';
+import { stateManager, makeReactive } from './state';
+import { applyTransition } from './transitions';
+import { collectBindingsForRoot } from './bindings';
+import { getWireEventHandlers, getRenderBindings, getDestroy } from './runtime-api';
 
 const ifPlaceholders = new WeakMap<Element, Comment>();
 const eachPlaceholders = new WeakMap<Element, Comment>();
@@ -15,7 +19,10 @@ export const handleIfDirective: DirectiveHandler = (el, expr, state) => {
   
   if (!placeholder) {
     placeholder = document.createComment('if');
-    try { el.parentNode?.insertBefore(placeholder, el); } catch {}
+    try {
+      const parentNode = el.parentNode;
+      if (parentNode) parentNode.insertBefore(placeholder, el);
+    } catch {}
     ifPlaceholders.set(el, placeholder);
   }
   
@@ -29,15 +36,18 @@ export const handleIfDirective: DirectiveHandler = (el, expr, state) => {
     if (placeholder.nextSibling !== el) {
       try { parent.insertBefore(el, placeholder.nextSibling); } catch {}
       // Ensure events are wired for newly inserted subtree
-      try { (window as any).wireEventHandlers?.(el, state); } catch {}
+      try { getWireEventHandlers()(el, state); } catch {}
     }
-    if (elseSibling?.parentNode) {
-      // Hide else sibling if present
-      try {
-        (elseSibling as HTMLElement).setAttribute('hidden','');
-        (elseSibling as HTMLElement).setAttribute('aria-hidden','true');
-        (elseSibling as HTMLElement).style.display = 'none';
-      } catch {}
+    if (elseSibling) {
+      const elseParent = elseSibling.parentNode;
+      if (elseParent) {
+        // Hide else sibling if present
+        try {
+          (elseSibling as HTMLElement).setAttribute('hidden','');
+          (elseSibling as HTMLElement).setAttribute('aria-hidden','true');
+          (elseSibling as HTMLElement).style.display = 'none';
+        } catch {}
+      }
     }
   } else {
     if (el.parentNode) {
@@ -46,7 +56,7 @@ export const handleIfDirective: DirectiveHandler = (el, expr, state) => {
     if (elseSibling && placeholder.nextSibling !== elseSibling) {
       try { parent.insertBefore(elseSibling, placeholder.nextSibling); } catch {}
       // Wire events on else block subtree as it becomes active
-      try { (window as any).wireEventHandlers?.(elseSibling, state); } catch {}
+      try { getWireEventHandlers()(elseSibling, state); } catch {}
     }
     // Show else sibling
     if (elseSibling) {
@@ -64,7 +74,7 @@ export const handleShowDirective: DirectiveHandler = (el, expr, state) => {
   const hasTransition = el.hasAttribute('s-transition') || el.hasAttribute('@transition');
   if (hasTransition) {
     const spec = el.getAttribute('s-transition') || el.getAttribute('@transition') || 'fade';
-    (window as any).applyTransition?.(el as HTMLElement, spec || 'fade', visible);
+    applyTransition(el as HTMLElement, spec || 'fade', visible);
     return;
   }
   if (visible) {
@@ -96,11 +106,17 @@ export const handleEachDirective: DirectiveHandler = (el, expr, state, root) => 
   let placeholder = eachPlaceholders.get(el);
   if (!placeholder) {
     placeholder = document.createComment('each');
-    try { el.parentNode?.insertBefore(placeholder, el); } catch {}
+    try {
+      const parentNode = el.parentNode;
+      if (parentNode) parentNode.insertBefore(placeholder, el);
+    } catch {}
     eachPlaceholders.set(el, placeholder);
     const template = el.cloneNode(true) as Element;
     eachTemplates.set(el, template);
-    try { el.parentNode?.removeChild(el); } catch {}
+    try {
+      const parentNode = el.parentNode;
+      if (parentNode) parentNode.removeChild(el);
+    } catch {}
   }
   
   const parent = placeholder.parentNode;
@@ -109,8 +125,11 @@ export const handleEachDirective: DirectiveHandler = (el, expr, state, root) => 
   // Cleanup previous children
   const previousChildren = eachChildren.get(el) || [];
   for (const child of previousChildren) {
-    try { (window as any).destroy?.(child); } catch {}
-    try { child.parentNode?.removeChild(child); } catch {}
+    try { getDestroy()(child); } catch {}
+    try {
+      const parentNode = child.parentNode;
+      if (parentNode) parentNode.removeChild(child);
+    } catch {}
   }
   
   // Render new children (preserve order with moving anchor)
@@ -146,11 +165,11 @@ export const handleEachDirective: DirectiveHandler = (el, expr, state, root) => 
     extendedState[itemKey] = items[i];
     extendedState[idxKey] = i;
     
-    const reactiveState = (window as any).makeReactive?.(extendedState, clone);
-    (window as any).stateManager?.setRootState?.(clone, reactiveState);
-    (window as any).collectBindingsForRoot?.(clone);
-    (window as any).renderBindings?.(reactiveState, clone);
-    (window as any).wireEventHandlers?.(clone, reactiveState);
+    const reactiveState = makeReactive(extendedState, clone);
+    stateManager.setRootState(clone, reactiveState);
+    collectBindingsForRoot(clone);
+    getRenderBindings()(reactiveState, clone);
+    getWireEventHandlers()(clone, reactiveState);
     newChildren.push(clone);
   }
   

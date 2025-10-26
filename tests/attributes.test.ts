@@ -47,75 +47,61 @@ describe("Attributes", () => {
        * Checkboxes use the 'checked' property, not the value attribute.
        * The handler should set both the property and the attribute.
        */
-      test("handles checkbox input", () => {
+      test.each([
+        {
+          name: "checkbox input",
+          setup: (input: HTMLInputElement) => {
+            input.type = "checkbox";
+            input.setAttribute("data-model", "checked");
+          },
+          statePatch: { checked: true },
+          modelKey: "checked",
+          expectedChecked: true,
+          expectAttr: true
+        },
+        {
+          name: "unchecked checkbox",
+          setup: (input: HTMLInputElement) => {
+            input.type = "checkbox";
+            input.setAttribute("data-model", "checked");
+          },
+          statePatch: { checked: false },
+          modelKey: "checked",
+          expectedChecked: false,
+          expectAttr: false
+        },
+        {
+          name: "radio input",
+          setup: (input: HTMLInputElement) => {
+            input.type = "radio";
+            input.value = "option1";
+            input.setAttribute("data-model", "selectedOption");
+          },
+          statePatch: { selectedOption: "option1" },
+          modelKey: "selectedOption",
+          expectedChecked: true,
+          expectAttr: true
+        },
+        {
+          name: "unchecked radio input",
+          setup: (input: HTMLInputElement) => {
+            input.type = "radio";
+            input.value = "option1";
+            input.setAttribute("data-model", "selectedOption");
+          },
+          statePatch: { selectedOption: "option2" },
+          modelKey: "selectedOption",
+          expectedChecked: false,
+          expectAttr: false
+        }
+      ])('handles $name', ({ setup, statePatch, modelKey, expectedChecked, expectAttr }) => {
         const input = document.createElement("input");
-        input.type = "checkbox";
-        input.setAttribute("data-model", "checked");
-        
-        const result = attrHandlers.value?.(input, "checked", "{checked}", mockState, mockElement);
-        
+        setup(input);
+        Object.assign(mockState, statePatch);
+        const result = attrHandlers.value?.(input, modelKey, `{${modelKey}}`, mockState, mockElement);
         expect(result).toBe(true);
-        expect(input.checked).toBe(true);
-        expect(input.hasAttribute("checked")).toBe(true);
-      });
-
-      /**
-       * Test unchecked checkbox handling
-       * 
-       * When false, the checked property should be false and the
-       * checked attribute should be removed.
-       */
-      test("handles unchecked checkbox", () => {
-        const input = document.createElement("input");
-        input.type = "checkbox";
-        input.setAttribute("data-model", "checked");
-        mockState.checked = false;
-        
-        const result = attrHandlers.value?.(input, "checked", "{checked}", mockState, mockElement);
-        
-        expect(result).toBe(true);
-        expect(input.checked).toBe(false);
-        expect(input.hasAttribute("checked")).toBe(false);
-      });
-
-      /**
-       * Test radio input handling
-       * 
-       * Radio buttons are checked when their value matches the state value.
-       * This enables two-way binding for radio button groups.
-       */
-      test("handles radio input", () => {
-        const input = document.createElement("input");
-        input.type = "radio";
-        input.value = "option1";
-        input.setAttribute("data-model", "selectedOption");
-        mockState.selectedOption = "option1";
-        
-        const result = attrHandlers.value?.(input, "selectedOption", "{selectedOption}", mockState, mockElement);
-        
-        expect(result).toBe(true);
-        expect(input.checked).toBe(true);
-        expect(input.hasAttribute("checked")).toBe(true);
-      });
-
-      /**
-       * Test unchecked radio input handling
-       * 
-       * When the state value doesn't match the radio's value,
-       * it should be unchecked.
-       */
-      test("handles unchecked radio input", () => {
-        const input = document.createElement("input");
-        input.type = "radio";
-        input.value = "option1";
-        input.setAttribute("data-model", "selectedOption");
-        mockState.selectedOption = "option2";
-        
-        const result = attrHandlers.value?.(input, "selectedOption", "{selectedOption}", mockState, mockElement);
-        
-        expect(result).toBe(true);
-        expect(input.checked).toBe(false);
-        expect(input.hasAttribute("checked")).toBe(false);
+        expect(input.checked).toBe(expectedChecked);
+        expect(input.hasAttribute("checked")).toBe(expectAttr);
       });
 
       /**

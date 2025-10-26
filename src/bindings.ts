@@ -14,6 +14,7 @@
 import type { Scope, AttrBinding, InterpBinding } from './types';
 import { SKIP_TAGS, DIRECTIVES } from './constants';
 import { hasBraces, isInsideEachTemplate } from './utils';
+import { getMountComponent } from './runtime-api';
 
 /**
  * BINDING STORAGE
@@ -114,7 +115,9 @@ function collectNestedComponents(root: Element): void {
     
     // Mount the nested component
     // WHY: Child components need their own state and bindings
-    (window as any).mountComponent?.(host, className, inherit);
+    try {
+      getMountComponent()(host, className, inherit);
+    } catch {}
   }
 }
 
@@ -209,30 +212,40 @@ function collectAttributeBindings(root: Element): void {
 function collectTextInterpolations(root: Element): void {
   const textBindings: InterpBinding[] = [];
   
-  // Use TreeWalker to efficiently traverse all text nodes
-  // WHY: TreeWalker is faster than querySelectorAll for text nodes
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let node: Node | null = walker.nextNode();
-  
-  while (node) {
-    const textNode = node as Text;
-    const parent = textNode.parentElement;
-    
-    // Only process text nodes in valid elements
-    if (parent && 
-        !SKIP_TAGS.has(parent.tagName) && // Skip script, style, etc.
-        !isInsideEachTemplate(parent) && // Skip @each template content
-        !(parent.hasAttribute('s-each') || parent.hasAttribute('@each'))) { // Skip @each holders
-      
-      // Check if the text contains expressions (braces)
-      if (textNode.nodeValue && /\{[^}]+\}/.test(textNode.nodeValue)) {
-        textBindings.push({ node: textNode, template: textNode.nodeValue });
+  // Use TreeWalker when available; otherwise, fall back to scanning element textContent
+  const createTreeWalker = (document as any).createTreeWalker;
+  if (typeof createTreeWalker === 'function') {
+    const nodeFilter = (globalThis as any).NodeFilter;
+    const SHOW_TEXT = nodeFilter && typeof nodeFilter.SHOW_TEXT === 'number'
+      ? nodeFilter.SHOW_TEXT
+      : 4;
+    const walker = createTreeWalker.call(document, root, SHOW_TEXT as any);
+    let node: Node | null = walker.nextNode();
+    while (node) {
+      const textNode = node as Text;
+      const parent = textNode.parentElement;
+      if (parent && 
+          !SKIP_TAGS.has(parent.tagName) &&
+          !isInsideEachTemplate(parent) &&
+          !(parent.hasAttribute('s-each') || parent.hasAttribute('@each'))) {
+        if (textNode.nodeValue && /\{[^}]+\}/.test(textNode.nodeValue)) {
+          textBindings.push({ node: textNode, template: textNode.nodeValue });
+        }
+      }
+      node = (walker as any).nextNode();
+    }
+  } else {
+    const all = [root, ...Array.from(root.querySelectorAll('*'))] as Element[];
+    for (const el of all) {
+      if (SKIP_TAGS.has(el.tagName)) continue;
+      if (isInsideEachTemplate(el)) continue;
+      if (el.hasAttribute('s-each') || el.hasAttribute('@each')) continue;
+      const txt = el.textContent;
+      if (typeof txt === 'string' && /\{[^}]+\}/.test(txt)) {
+        textBindings.push({ node: el as any, template: txt });
       }
     }
-    node = walker.nextNode();
   }
-  
-  // Store the bindings for this component
   interpBindings.set(root, textBindings);
 }
 
