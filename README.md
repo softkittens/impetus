@@ -3,14 +3,14 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE) [![Runtime: Bun 1.3+](https://img.shields.io/badge/runtime-bun%201.3%2B-000)](https://bun.sh) [![TypeScript](https://img.shields.io/badge/language-TypeScript-3178c6)](#)
 
 
-## One line. Reactive UI.
+## One tag. Interactive UI.
 
-A tiny HTML-first runtime that turns static pages into interactive UI. Load from a CDN and ship.
+A tiny HTML‑first micro‑runtime that turns static pages into interactive UI — straight from a CDN.
 
-- Start in seconds: add one script tag.
-- HTML-first: write behavior where you render.
-- No build. No VDOM. No tooling.
-- Small API: directives, events, simple components.
+- Start in seconds. Drop a script, go interactive.
+- HTML‑first. Author behavior where you render.
+- Zero build. No VDOM. Works on static hosting.
+- Tiny API. Directives, inline expressions, class components.
 
 
 ## Get started (CDN)
@@ -26,21 +26,11 @@ A tiny HTML-first runtime that turns static pages into interactive UI. Load from
 
 ## Table of Contents
 - [Example](#example)
-- [Inline Component Example](#inline-component-example)
-- [Component Example](#component-example-using-template)
 - [Key Benefits](#key-benefits)
 - [Quick Syntax](#quick-syntax)
 - [Why Impetus](#why-impetus)
-- [When to use Impetus](#when-to-use-impetus)
-- [When not to use Impetus](#when-not-to-use-impetus)
 - [Quick Start](#quick-start)
-- [Core Concepts](#core-concepts)
 - [Components API (use + template)](#components-api-use--template)
-- [Reactivity model](#reactivity-model)
-- [Architecture (runtime.ts)](#architecture-runtimets)
-- [Performance notes](#performance-notes)
-- [Build scripts](#build-scripts)
-- [Examples (open after build)](#examples-open-after-build)
 - [FAQ](#faq)
 - [Acknowledgements](#acknowledgements)
 - [Contributing](#contributing)
@@ -125,12 +115,12 @@ A tiny HTML-first runtime that turns static pages into interactive UI. Load from
 ```
 
 ## Key Benefits
-- ⚡ **Minimal API**: directives, inline expressions, simple components.
-- 🔁 **Reactive by default**: Proxy state, microtask-batched renders.
-- 🧩 **Drop-in**: static HTML, no VDOM, no compile step.
-- 🛠️ **Practical DX**: `$event`, outside-click, keyboard helpers.
-- 🧪 **Confidence**: tested core, examples in `app/`.
-- 🌐 **CDN-first**: load from a CDN and start immediately.
+- ⚡️ Fast to adopt — One script tag; works on any static page.
+- 🧠 Simple mental model — Plain objects for state; plain HTML for views.
+- 🧩 Real components when you need them — Class‑based components with templates and lifecycle.
+- 🎯 Precise bindings — `{expr}` in text/attrs; `@if/@show/@each` for structure; `$event` for robust events.
+- 🧪 Confidence — Tested core; examples in `app/`.
+- 🌐 CDN‑first — Import from a CDN; no bundler required.
 
 ## Quick Syntax
 
@@ -178,11 +168,11 @@ Two-way model (shorthand)
 <input :value="user.email" />
 ```
 
-## Why Impetus?
-- **Zero-setup progressive enhancement.** Start with a static page and sprinkle behavior.
-- **Understandable mental model.** State is plain objects; templates are plain HTML.
-- **Fast enough by design.** Microtask-batched updates and per-root computed caching.
-- **Just enough components.** Opt-in class-based components with templates and lifecycle hooks.
+## Why Impetus
+- Zero‑setup progressive enhancement for static sites.
+- HTML you already write, just reactive.
+- Class components without a framework tax: constructor props, lifecycle, template resolution.
+- Microtask‑batched updates and per‑root caching keep it fast by default.
 
 ## When to use Impetus
 - You want to progressively enhance static pages without a build step.
@@ -298,22 +288,7 @@ Two-way model (shorthand)
 
 Attach a class and optionally a template id. Three template patterns are supported:
 
-### Shorthand Host Syntax (NEW)
 
-You can also use a kebab-case shorthand to mount a component without writing `use="ClassName"`:
-
-```html
-<!-- Inline component using host content as template -->
-<div use-fancy-counter class="card"> ... </div>
-
-<!-- Using a template id (sets template attribute automatically) -->
-<div use-fancy-counter="card" class="card"></div>
-```
-
-Rules:
-- `use-<kebab-class>` maps to PascalCase class: `fancy-counter` → `FancyCounter`.
-- If a value is provided (e.g. `use-fancy-counter="card"`) and `template` is not present, the runtime sets `template="card"` before mounting.
-- Without a value, the element's inline content is used as the template.
 
 ### 1. Inline Templates
 Use the element's own content as the template - no separate template needed:
@@ -394,19 +369,7 @@ Templates resolve in order:
 - Other attributes are converted to camelCase (e.g., `max-items` → `maxItems`)
 - If `inherit` attribute is present, the component uses the nearest parent scope instance instead of constructing a new one
 
-### Template anchors
 
-Mount a `<template>` by placing a `template="id"` attribute on an element:
-
-```html
-<template id="card">
-  <div class="card">{title}</div>
-</template>
-
-<section template="card"></section>
-```
-
-At mount time, Impetus replaces the element’s contents with the cloned template and removes the `template` attribute to avoid re-processing.
 
 ## Reactivity model
 
