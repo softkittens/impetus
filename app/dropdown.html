@@ -15,11 +15,8 @@
             <p class="text-sm text-gray-600">Simple dropdown using Impetus components (use + template).</p>
         </header>
 
-        <!-- Host -->
-        <div use="Dropdown" class="max-w-sm"></div>
-
-        <!-- Template -->
-        <template id="dropdown">
+        <!-- Host with inline template -->
+        <div use="Dropdown" class="max-w-sm">
             <div 
                 class="relative inline-block text-left w-full" 
                 onclick="$event.outside && (open = false)"
@@ -51,12 +48,11 @@
                     </ul>
                 </div>
             </div>
-        </template>
+        </div>
 
         <!-- Logic -->
         <script>
             class Dropdown {
-                static template = 'dropdown'
                 constructor(props = {}) {
                     this.items = props.items ?? ['First', 'Second', 'Third']
                     this.value = this.items[0]

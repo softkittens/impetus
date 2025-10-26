@@ -13,72 +13,32 @@
       <p class="text-sm text-gray-600">Accessible accordion using Impetus components.</p>
     </header>
 
-    <!-- Host -->
-    <div use="Accordion" class="max-w-2xl"></div>
-
-    <!-- Templates -->
-    <template id="accordion">
+    <!-- Host with inline template -->
+    <div use="Accordion" class="max-w-2xl">
       <div class="divide-y divide-gray-200">
-        <div class="py-2">
+        <div class="py-2" @each="items as item,i">
           <button class="flex w-full items-center justify-between py-2 text-left"
-                  aria-expanded="{openIndex===0}"
-                  aria-controls="panel-0"
-                  onclick="toggle(0)"
-                  onkeydown="(($event.key==='Enter'||$event.key===' ') && (toggle(0)))">
-            <span class="font-medium">{items[0].title}</span>
+                  aria-expanded="{openIndex===i}"
+                  aria-controls="panel-{i}"
+                  onclick="toggle(i)"
+                  onkeydown="(($event.key==='Enter'||$event.key===' ') && (toggle(i)))">
+            <span class="font-medium">{item.title}</span>
             <svg class="h-4 w-4 opacity-60" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.188l3.71-3.957a.75.75 0 111.08 1.04l-4.24 4.52a.75.75 0 01-1.08 0L5.25 8.27a.75.75 0 01-.02-1.06z" clip-rule="evenodd"/>
             </svg>
           </button>
-          <div id="panel-0" class="grid transition-[grid-template-rows] duration-200 ease-out { openIndex===0 ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]' }">
+          <div id="panel-{i}" class="grid transition-[grid-template-rows] duration-200 ease-out { openIndex===i ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]' }">
             <div class="overflow-hidden text-sm text-gray-700">
-              {items[0].content}
-            </div>
-          </div>
-        </div>
-
-        <div class="py-2">
-          <button class="flex w-full items-center justify-between py-2 text-left"
-                  aria-expanded="{openIndex===1}"
-                  aria-controls="panel-1"
-                  onclick="toggle(1)"
-                  onkeydown="(($event.key==='Enter'||$event.key===' ') && (toggle(1)))">
-            <span class="font-medium">{items[1].title}</span>
-            <svg class="h-4 w-4 opacity-60" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.188l3.71-3.957a.75.75 0 111.08 1.04l-4.24 4.52a.75.75 0 01-1.08 0L5.25 8.27a.75.75 0 01-.02-1.06z" clip-rule="evenodd"/>
-            </svg>
-          </button>
-          <div id="panel-1" class="grid transition-[grid-template-rows] duration-200 ease-out { openIndex===1 ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]' }">
-            <div class="overflow-hidden text-sm text-gray-700">
-              {items[1].content}
-            </div>
-          </div>
-        </div>
-
-        <div class="py-2">
-          <button class="flex w-full items-center justify-between py-2 text-left"
-                  aria-expanded="{openIndex===2}"
-                  aria-controls="panel-2"
-                  onclick="toggle(2)"
-                  onkeydown="(($event.key==='Enter'||$event.key===' ') && (toggle(2)))">
-            <span class="font-medium">{items[2].title}</span>
-            <svg class="h-4 w-4 opacity-60" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-              <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.188l3.71-3.957a.75.75 0 111.08 1.04l-4.24 4.52a.75.75 0 01-1.08 0L5.25 8.27a.75.75 0 01-.02-1.06z" clip-rule="evenodd"/>
-            </svg>
-          </button>
-          <div id="panel-2" class="grid transition-[grid-template-rows] duration-200 ease-out { openIndex===2 ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]' }">
-            <div class="overflow-hidden text-sm text-gray-700">
-              {items[2].content}
+              {item.content}
             </div>
           </div>
         </div>
       </div>
-    </template>
+    </div>
 
     <!-- Logic -->
     <script>
       class Accordion {
-        static template = 'accordion'
         constructor(props = {}) {
           this.items = props.items ?? [
             { title: 'Section 1', content: 'Lorem ipsum dolor sit amet.' },

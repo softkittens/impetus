@@ -13,11 +13,8 @@
       <p class="text-sm text-gray-600">iOS-style switch with hidden input and accessibility.</p>
     </header>
 
-    <!-- Host -->
-    <div use="Toggle" class="max-w-sm"></div>
-
-    <!-- Template -->
-    <template id="toggle">
+    <!-- Host with inline template -->
+    <div use="Toggle" class="max-w-sm">
       <div class="space-y-4">
         <!-- Hidden input mirrors state for form submission -->
         <input type="hidden" name="{name}" value="{checked ? onValue : offValue}">
@@ -39,12 +36,11 @@
           State: <span class="font-medium">{checked ? 'On' : 'Off'}</span>
         </div>
       </div>
-    </template>
+    </div>
 
     <!-- Logic -->
     <script>
       class Toggle {
-        static template = 'toggle'
         constructor(props = {}) {
           this.checked = props.checked ?? false
           this.name = props.name ?? 'toggle'

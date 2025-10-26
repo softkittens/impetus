@@ -13,11 +13,8 @@
       <p class="text-sm text-gray-600">Filter a list using two-way bound input and conditional rendering.</p>
     </header>
 
-    <!-- Host -->
-    <div use="ListDemo"></div>
-
-    <!-- Template -->
-    <template id="list-demo">
+    <!-- Host with inline template -->
+    <div use="ListDemo">
       <div class="space-y-4">
         <div>
           <label for="q" class="block text-sm font-medium">Search</label>
@@ -35,12 +32,11 @@
         </div>
         <div @else class="text-sm text-gray-600">No results found.</div>
       </div>
-    </template>
+    </div>
 
     <!-- Logic -->
     <script>
       class ListDemo {
-        static template = 'list-demo'
         constructor() {
           this.query = ''
           this.items = ['Apricot','Banana','Cherry','Date','Elderberry']

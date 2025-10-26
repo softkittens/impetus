@@ -16,11 +16,8 @@
       <p class="text-sm text-gray-600">Single and multiple selects bound to Impetus state.</p>
     </header>
 
-    <!-- Host -->
-    <div use="Select2Demo" class="max-w-2xl"></div>
-
-    <!-- Template -->
-    <template id="select2-demo">
+    <!-- Host with inline template -->
+    <div use="Select2Demo" class="max-w-2xl">
       <div class="space-y-6">
         <!-- Single -->
         <div class="grid gap-2">
@@ -46,12 +43,11 @@
           <div class="text-xs text-gray-600">Selected tags: {tags.join(', ') || '—'}</div>
         </div>
       </div>
-    </template>
+    </div>
 
     <!-- Logic -->
     <script>
       class Select2Demo {
-        static template = 'select2-demo'
         constructor() {
           this.country = ''
           this.tags = []

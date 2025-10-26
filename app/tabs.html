@@ -13,11 +13,8 @@
       <p class="text-sm text-gray-600">Keyboard-accessible tabs with ARIA.</p>
     </header>
 
-    <!-- Host -->
-    <div use="TabsDemo" class="max-w-3xl"></div>
-
-    <!-- Template -->
-    <template id="tabs-demo">
+    <!-- Host with inline template -->
+    <div use="TabsDemo" class="max-w-3xl">
       <div class="space-y-4">
         <!-- Tablist -->
         <div role="tablist" aria-label="Sample tabs" class="flex gap-2 border-b border-gray-200"
@@ -47,12 +44,11 @@
           </div>
         </div>
       </div>
-    </template>
+    </div>
 
     <!-- Logic -->
     <script>
       class TabsDemo {
-        static template = 'tabs-demo'
         constructor() {
           this.activeIndex = 0
           this.tabs = [

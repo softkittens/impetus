@@ -15,11 +15,8 @@
       <p class="text-sm text-gray-600">Load data with loading and error states.</p>
     </header>
 
-    <!-- Host -->
-    <div use="FetchDemo" class="max-w-2xl"></div>
-
-    <!-- Template -->
-    <template id="fetch-demo">
+    <!-- Host with inline template -->
+    <div use="FetchDemo" class="max-w-2xl">
       <div class="space-y-4">
         <div class="flex items-center gap-2">
           <button class="rounded bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-800"
@@ -51,12 +48,11 @@
         <!-- Empty -->
         <div @show="!loading && !error && !items.length" class="text-sm text-gray-600">No data yet.</div>
       </div>
-    </template>
+    </div>
 
     <!-- Logic -->
     <script>
       class FetchDemo {
-        static template = 'fetch-demo'
         constructor() {
           this.loading = false
           this.error = ''

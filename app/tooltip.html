@@ -17,11 +17,8 @@
       <p class="text-sm text-gray-600">Using Tippy.js (Popper under the hood) with hover and focus triggers.</p>
     </header>
 
-    <!-- Host -->
-    <div use="TooltipDemo"></div>
-
-    <!-- Template -->
-    <template id="tooltip-demo">
+    <!-- Host with inline template -->
+    <div use="TooltipDemo">
       <div class="space-y-6">
         <div class="flex items-center gap-4">
           <button id="save-btn" class="rounded bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-800"
@@ -41,12 +38,11 @@
           <span id="tip-name" class="sr-only">Enter your full name</span>
         </div>
       </div>
-    </template>
+    </div>
 
     <!-- Logic -->
     <script>
       class TooltipDemo {
-        static template = 'tooltip-demo'
         onMount(root) {
           const tippy = window.tippy;
           if (!tippy) return;

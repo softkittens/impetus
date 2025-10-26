@@ -33,13 +33,8 @@
 <body>
   <h1>Impetus counter</h1>
 
-  <!-- Hosts using the new API -->
-  <div use="Counter" class="card" props='{"start": 1}'></div>
-  <div use="FancyCounter" class="card"></div>
-  <div use="Counter" class="card" template="counter" max="7"></div>
-
-  <!-- Templates referenced by id -->
-  <template id="counter">
+  <!-- Hosts using inline components -->
+  <div use="Counter" class="card" props='{"start": 1}'>
     <div class="max-w-sm rounded-lg border border-gray-200 p-4 space-y-3">
       <p class="text-lg font-semibold">Count: {count}</p>
       <div class="flex items-center gap-2">
@@ -47,28 +42,50 @@
           disabled="count >= max">+</button>
       </div>
     </div>
-  </template>
+  </div>
+  
+  <div use="FancyCounter" class="card">
+    <div class="max-w-sm rounded-lg border border-gray-200 p-4 space-y-3">
+      <p class="text-lg font-semibold">Fancy Count: {count}</p>
+      <div class="flex items-center gap-2">
+        <button class="px-3 py-2 rounded bg-purple-600 text-white disabled:opacity-50" onclick="inc()"
+          disabled="count >= max">+</button>
+      </div>
+    </div>
+  </div>
+  
+  <div use="Counter" class="card" max="7">
+    <div class="max-w-sm rounded-lg border border-gray-200 p-4 space-y-3">
+      <p class="text-lg font-semibold">Count (max 7): {count}</p>
+      <div class="flex items-center gap-2">
+        <button class="px-3 py-2 rounded bg-gray-900 text-white disabled:opacity-50" onclick="inc()"
+          disabled="count >= max">+</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Logic: multiple classes can live in one script tag -->
   <script>
     class Counter {
-      static template = 'counter';
       constructor(props = {}) {
         this.count = props.start ?? 0;
         this.max = props.max ?? 5;
       }
-      inc() { this.count++; }
+      inc() { 
+        if (this.count < this.max) this.count++; 
+      }
       onMount() { }
       onDestroy() { }
     }
 
     class FancyCounter {
-      static template = 'counter';
       constructor(props = {}) {
         this.count = props.start ?? 10;
         this.max = 10;
       }
-      inc() { this.count++; }
+      inc() { 
+        if (this.count < this.max) this.count++; 
+      }
     }
   </script>
 

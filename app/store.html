@@ -13,52 +13,45 @@
       <p class="text-sm text-gray-600">Two components share state via <code>$store</code>. Event modifiers: <code>.prevent</code>, <code>.stop</code>, <code>.once</code>.</p>
     </header>
 
-    <!-- Hosts -->
+    <!-- Hosts with inline templates -->
     <div class="grid gap-6 sm:grid-cols-2">
-      <div use="StoreCounter" class="rounded border border-gray-200 p-4"></div>
-      <div use="StoreViewer" class="rounded border border-gray-200 p-4"></div>
-    </div>
-
-    <!-- Template: Counter -->
-    <template id="store-counter">
-      <div class="space-y-3">
-        <div class="text-sm text-gray-600">Shared count in $store</div>
-        <div class="text-2xl font-semibold">{$store.count ?? 0}</div>
-        <div class="flex gap-2">
-          <button class="rounded bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-800" onclick="inc()">+1</button>
-          <button class="rounded bg-gray-200 px-3 py-2 text-sm text-gray-900 hover:bg-gray-300" onclick="dec()">-1</button>
-          <a href="https://example.com" class="text-sm text-blue-600 hover:underline" onclick.prevent="inc()">Link + .prevent</a>
-        </div>
-        <div class="border-t pt-3">
-          <div onclick="outerClick()" class="rounded bg-gray-50 p-3">
-            <div class="text-xs text-gray-600">Outer listens (will log). Inner has .stop.</div>
-            <button class="mt-2 rounded bg-blue-600 px-2 py-1 text-xs text-white" onclick.stop="innerClick()">Inner (.stop)</button>
+      <div use="StoreCounter" class="rounded border border-gray-200 p-4">
+        <div class="space-y-3">
+          <div class="text-sm text-gray-600">Shared count in $store</div>
+          <div class="text-2xl font-semibold">{$store.count ?? 0}</div>
+          <div class="flex gap-2">
+            <button class="rounded bg-gray-900 px-3 py-2 text-sm text-white hover:bg-gray-800" onclick="inc()">+1</button>
+            <button class="rounded bg-gray-200 px-3 py-2 text-sm text-gray-900 hover:bg-gray-300" onclick="dec()">-1</button>
+            <a href="https://example.com" class="text-sm text-blue-600 hover:underline" onclick.prevent="inc()">Link + .prevent</a>
+          </div>
+          <div class="border-t pt-3">
+            <div onclick="outerClick()" class="rounded bg-gray-50 p-3">
+              <div class="text-xs text-gray-600">Outer listens (will log). Inner has .stop.</div>
+              <button class="mt-2 rounded bg-blue-600 px-2 py-1 text-xs text-white" onclick.stop="innerClick()">Inner (.stop)</button>
+            </div>
           </div>
         </div>
       </div>
-    </template>
-
-    <!-- Template: Viewer -->
-    <template id="store-viewer">
-      <div class="space-y-3">
-        <div class="text-sm text-gray-600">Another component sees the same $store</div>
-        <div class="text-2xl font-semibold">{$store.count ?? 0}</div>
-        <button class="rounded bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-700" onclick.once="helloOnce()">Click me (.once)</button>
-        <div class="text-xs text-gray-500">After first click, handler detaches.</div>
+      
+      <div use="StoreViewer" class="rounded border border-gray-200 p-4">
+        <div class="space-y-3">
+          <div class="text-sm text-gray-600">Another component sees the same $store</div>
+          <div class="text-2xl font-semibold">{$store.count ?? 0}</div>
+          <button class="rounded bg-emerald-600 px-3 py-2 text-sm text-white hover:bg-emerald-700" onclick.once="helloOnce()">Click me (.once)</button>
+          <div class="text-xs text-gray-500">After first click, handler detaches.</div>
+        </div>
       </div>
-    </template>
+    </div>
 
     <!-- Logic -->
     <script>
       class StoreCounter {
-        static template = 'store-counter'
         inc() { this.$store.count = (this.$store.count ?? 0) + 1 }
         dec() { this.$store.count = (this.$store.count ?? 0) - 1 }
         outerClick() { console.log('outer clicked') }
         innerClick() { console.log('inner clicked (stopped)') }
       }
       class StoreViewer {
-        static template = 'store-viewer'
         helloOnce() { console.log('hello once') }
       }
     </script>

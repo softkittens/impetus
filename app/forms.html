@@ -13,11 +13,8 @@
       <p class="text-sm text-gray-600">Two-way bindings via inline events and value/checked attributes.</p>
     </header>
 
-    <!-- Host -->
-    <div use="FormsDemo"></div>
-
-    <!-- Template -->
-    <template id="forms">
+    <!-- Host with inline template -->
+    <div use="FormsDemo">
       <form class="grid gap-6">
         <!-- Text -->
         <div class="grid gap-2">
@@ -105,12 +102,11 @@
           <span class="ml-2 text-sm { submitted ? '' : 'hidden' }">Submitted!</span>
         </div>
       </form>
-    </template>
+    </div>
 
     <!-- Logic -->
     <script>
       class FormsDemo {
-        static template = 'forms'
         constructor() {
           this.name = ''
           this.bio = ''

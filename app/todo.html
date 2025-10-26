@@ -13,11 +13,8 @@
       <p class="text-sm text-gray-600">Add, toggle, delete, and filter todos.</p>
     </header>
 
-    <!-- Host -->
-    <div use="TodoDemo" class="max-w-2xl"></div>
-
-    <!-- Template -->
-    <template id="todo-demo">
+    <!-- Host with inline template -->
+    <div use="TodoDemo" class="max-w-2xl">
       <div class="space-y-4">
         <!-- Input -->
         <div class="flex gap-2">
@@ -52,9 +49,9 @@
         <div @if="visible.length" class="rounded border border-gray-200 bg-white">
           <ul class="divide-y divide-gray-100">
             <li @each="visible as t,i" class="flex items-center gap-3 p-3">
-              <input type="checkbox" :checked="t.done" onchange="$root.toggle(t)" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              <input type="checkbox" :checked="t.done" onchange="toggle(t)" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
               <span class="flex-1 { t.done ? 'line-through text-gray-400' : '' }">{t.text}</span>
-              <button class="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200" onclick="$root.remove(t)">Delete</button>
+              <button class="rounded bg-gray-100 px-2 py-1 text-xs hover:bg-gray-200" onclick="remove(t)">Delete</button>
             </li>
           </ul>
         </div>
@@ -71,12 +68,11 @@
           </div>
         </div>
       </div>
-    </template>
+    </div>
 
     <!-- Logic -->
     <script>
       class TodoDemo {
-        static template = 'todo-demo'
         constructor() {
           this.draft = ''
           this.filter = 'all'
