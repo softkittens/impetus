@@ -24,7 +24,7 @@ import { evalInScope, invalidateComputedCache } from './expression'; // Evaluate
 import { collectBindingsForRoot, clearBindings } from './bindings';   // Finds and tracks data bindings
 import { renderBindings } from './render';      // Updates the DOM when data changes
 import { wireEventHandlers, removeEventListeners } from './events';   // Handles user interactions (clicks, inputs)
-import { mountComponent, destroyComponent } from './components';     // Manages component lifecycle
+import { mountComponent, destroyComponent, isComponentInitialized } from './components';     // Manages component lifecycle
 import { applyTransition } from './transitions'; // Handles animations and transitions
 import { registerRuntimeApi, getRenderBindings, getWireEventHandlers, getDestroy, getMountComponent } from './runtime-api';
 import { setDevtoolsHooks, getDevtoolsHooks } from './devtools-hooks';
@@ -177,6 +177,41 @@ export function init(selector: string = "[scope],[x-data]"): void {
     if (!className) continue; // Skip if no class name
     const inherit = host.hasAttribute('inherit'); // Check for inheritance
     mountComponent(host, className, inherit);
+  }
+
+  // STEP 3: Also support shorthand host syntax: use-<kebab-class>="templateId?"
+  // Example: <div use-fancy-counter> (inline template)
+  //          <div use-fancy-counter="card"> (sets template="card")
+  const all = Array.from(document.querySelectorAll('*')) as Element[];
+  const kebabToPascal = (kebab: string): string => kebab
+    .split('-')
+    .filter(Boolean)
+    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+    .join('');
+
+  for (const el of all) {
+    const tag = el.tagName;
+    if (tag === 'TEMPLATE' || tag === 'SCRIPT') continue;
+    // Find first attribute that starts with "use-"
+    const attrs = Array.from(el.attributes);
+    const useAttr = attrs.find(a => a.name.startsWith('use-'));
+    if (!useAttr) continue;
+
+    const kebab = useAttr.name.slice('use-'.length);
+    const className = kebabToPascal(kebab);
+    if (!className) continue;
+
+    // If a value is provided and no explicit template attr exists, set it
+    const tplId = (useAttr.value || '').trim();
+    if (tplId && !el.hasAttribute('template')) {
+      try { el.setAttribute('template', tplId); } catch {}
+    }
+    const inherit = el.hasAttribute('inherit');
+    if (!isComponentInitialized(el)) {
+      mountComponent(el, className, inherit);
+    }
+    // Remove processed shorthand attribute to avoid confusion in props/bindings
+    try { el.removeAttribute(useAttr.name); } catch {}
   }
 }
 

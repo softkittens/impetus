@@ -105,19 +105,52 @@ function collectTemplateAnchors(root: Element): void {
  */
 function collectNestedComponents(root: Element): void {
   // Find all elements with a "use" attribute (component hosts)
-  const nestedHosts = Array.from(root.querySelectorAll('[use]:not(template):not(script)')) as Element[];
-  
-  for (const host of nestedHosts) {
+  const explicitUseHosts = Array.from(root.querySelectorAll('[use]:not(template):not(script)')) as Element[];
+  const mounted = new Set<Element>();
+
+  // Helper: kebab-case (fancy-counter) -> PascalCase (FancyCounter)
+  const kebabToPascal = (kebab: string): string => kebab
+    .split('-')
+    .filter(Boolean)
+    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+    .join('');
+
+  // Mount all [use] hosts first
+  for (const host of explicitUseHosts) {
     const className = (host.getAttribute('use') || '').trim();
     if (!className) continue;
-    
     const inherit = host.hasAttribute('inherit');
-    
-    // Mount the nested component
-    // WHY: Child components need their own state and bindings
-    try {
-      getMountComponent()(host, className, inherit);
-    } catch {}
+    try { getMountComponent()(host, className, inherit); } catch {}
+    mounted.add(host);
+  }
+
+  // Support convention: use-<kebab-class>="templateId?"
+  // Scan all elements (excluding <template> and <script>) for attributes starting with "use-"
+  const all = [root, ...Array.from(root.querySelectorAll('*'))] as Element[];
+  for (const el of all) {
+    const tag = el.tagName;
+    if (tag === 'TEMPLATE' || tag === 'SCRIPT') continue;
+    if (mounted.has(el)) continue;
+    const attrs = Array.from(el.attributes);
+    const useAttr = attrs.find(a => a.name.startsWith('use-'));
+    if (!useAttr) continue;
+
+    const kebab = useAttr.name.slice('use-'.length);
+    const className = kebabToPascal(kebab);
+    if (!className) continue;
+
+    // If value is provided and no explicit template attr exists, set it
+    const tplId = (useAttr.value || '').trim();
+    if (tplId && !el.hasAttribute('template')) {
+      try { el.setAttribute('template', tplId); } catch {}
+    }
+
+    const inherit = el.hasAttribute('inherit');
+    try { getMountComponent()(el, className, inherit); } catch {}
+    mounted.add(el);
+
+    // Remove the processed attribute to avoid confusing later passes
+    try { el.removeAttribute(useAttr.name); } catch {}
   }
 }
 

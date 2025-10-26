@@ -298,6 +298,23 @@ Two-way model (shorthand)
 
 Attach a class and optionally a template id. Three template patterns are supported:
 
+### Shorthand Host Syntax (NEW)
+
+You can also use a kebab-case shorthand to mount a component without writing `use="ClassName"`:
+
+```html
+<!-- Inline component using host content as template -->
+<div use-fancy-counter class="card"> ... </div>
+
+<!-- Using a template id (sets template attribute automatically) -->
+<div use-fancy-counter="card" class="card"></div>
+```
+
+Rules:
+- `use-<kebab-class>` maps to PascalCase class: `fancy-counter` → `FancyCounter`.
+- If a value is provided (e.g. `use-fancy-counter="card"`) and `template` is not present, the runtime sets `template="card"` before mounting.
+- Without a value, the element's inline content is used as the template.
+
 ### 1. Inline Templates
 Use the element's own content as the template - no separate template needed:
 
@@ -366,8 +383,8 @@ Original pattern with static template or template attribute:
 ### Template Resolution Priority
 Templates resolve in order:
 1. Host `template` attribute (highest priority)
-2. **Inline content** (NEW - uses host element content as template)
-3. Template ID from props (NEW - `template="id"` prop)
+2. Inline content (host element content)
+3. Template ID from props (`template="id"` prop)
 4. Static `Class.template` property
 5. Instance `this.template` property (lowest priority)
 
