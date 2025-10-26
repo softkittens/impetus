@@ -3,7 +3,7 @@
  */
 
 import { describe, test, expect } from "./setup";
-import { collectBindingsForRoot, getInterpolationBindings } from "../src/bindings";
+import { collectBindingsForRoot, getInterpolationBindings, getAttributeBindings } from "../src/bindings";
 
 describe("Bindings", () => {
   test("collectBindingsForRoot uses document.createTreeWalker with correct context", () => {
@@ -40,5 +40,23 @@ describe("Bindings", () => {
     } finally {
       (document as any).createTreeWalker = originalCreateTreeWalker;
     }
+  });
+
+  test("collectBindingsForRoot skips 'scope' attribute and still collects directive bindings", () => {
+    const root = document.createElement("div");
+    // scope JSON should not be treated as an attribute binding
+    (root as any).setAttribute("scope", '{"open": false}');
+
+    // place the directive on the root (mock querySelectorAll doesn't traverse children)
+    (root as any).setAttribute("@show", "open");
+
+    // collect
+    expect(() => collectBindingsForRoot(root)).not.toThrow();
+
+    const attrBindings = getAttributeBindings(root);
+    // ensure no binding created for 'scope'
+    expect(attrBindings.find(b => b.attr === 'scope')).toBeUndefined();
+    // ensure directive binding was collected on root
+    expect(attrBindings.find(b => b.attr === '@show')).toBeDefined();
   });
 });

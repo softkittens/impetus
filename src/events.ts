@@ -12,9 +12,10 @@
  */
 
 import type { Scope, EventHandler } from './types';
-import { evalInScope, assignInScope } from './expression';
+import { evalInScope, execInScope, assignInScope } from './expression';
 import { stateManager } from './state';
 import { getDevtoolsHooks } from './devtools-hooks';
+import { getRenderBindings } from './runtime-api';
 
 /**
  * EVENT LISTENER STORAGE
@@ -212,11 +213,13 @@ function wireEventListeners(el: Element, state: Scope, root: Element, listeners:
           }
         });
         
-        // Execute the event expression in component context
-        evalInScope(value, state, wrapped as any);
+        // Execute the event handler in component context (supports statements/multi-line)
+        execInScope(value, state, wrapped as any);
         
         // Schedule a re-render in case the event changed state
         stateManager.scheduleRender(root);
+        // Immediate render fallback to ensure visible updates
+        try { getRenderBindings()(state, root); } catch {}
       };
       
       /**

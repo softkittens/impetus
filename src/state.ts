@@ -33,6 +33,7 @@ const proxyRoots = new WeakMap<object, Set<Element>>(); // Maps proxy -> set of 
  */
 export class StateManager {
   private scheduled = new WeakSet<Element>();        // Components scheduled for re-render
+  private initMarks = new WeakSet<Element>();        // Components marked during initialization
   private rootStateMap = new WeakMap<Element, Scope>(); // Maps DOM element -> its state object
   private allRoots = new Set<Element>();             // All active component roots
   private renderCallbacks = new Set<(state: Scope, root: Element) => void>(); // Custom render callbacks
@@ -164,7 +165,7 @@ export class StateManager {
    * Double initialization would cause memory leaks and duplicate event listeners
    */
   isInitialized(root: Element): boolean {
-    return this.scheduled.has(root) || this.rootStateMap.has(root);
+    return this.initMarks.has(root) || this.rootStateMap.has(root);
   }
 
   /**
@@ -175,7 +176,7 @@ export class StateManager {
    * This prevents race conditions during initialization
    */
   markInitialized(root: Element): void {
-    this.scheduled.add(root);
+    this.initMarks.add(root);
   }
 
   /**

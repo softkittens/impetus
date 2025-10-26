@@ -155,7 +155,7 @@ function collectAttributeBindings(root: Element): void {
       
       // Skip component infrastructure attributes
       // WHY: These are framework attributes, not data bindings
-      if (name === 'props' || name === 'use' || name === 'template') continue;
+      if (name === 'props' || name === 'use' || name === 'template' || name === 'scope') continue;
       
       // Special handling for @each template holders
       // When an element has @each, only process the @each attribute itself

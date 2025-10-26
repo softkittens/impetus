@@ -19,6 +19,7 @@ import { directiveHandlers } from './directives';
 import { getDevtoolsHooks } from './devtools-hooks';
 import { attrHandlers, handleGenericAttribute } from './attributes';
 import { getAttributeBindings, getInterpolationBindings } from './bindings';
+import { collectBindingsForRoot } from './bindings';
 
 /**
  * MAIN RENDERING FUNCTION
@@ -42,6 +43,14 @@ export function renderBindings(state: Scope, root: Element): void {
   const start = (typeof performance !== 'undefined' && performance.now)
     ? performance.now()
     : Date.now();
+  // Defensive: ensure bindings are collected at least once for this root
+  let ab = getAttributeBindings(root);
+  let ib = getInterpolationBindings(root);
+  if (ab.length === 0 && ib.length === 0) {
+    try { collectBindingsForRoot(root); } catch {}
+    ab = getAttributeBindings(root);
+    ib = getInterpolationBindings(root);
+  }
   
   // STEP 1: Update all attribute bindings
   // This includes things like class, style, disabled, etc.

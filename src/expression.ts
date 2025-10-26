@@ -21,6 +21,7 @@ import { unwrapExpr } from './utils';
  * This makes the framework fast even with many expressions
  */
 const exprCache = new Map<string, Function>(); // Cache of expression string -> compiled function
+const stmtCache = new Map<string, Function>();
 const computedCache = new WeakMap<Element, Map<string, { value: any; deps: Set<string> }>>(); // Cache for computed properties per component
 const ctorCache = new Map<string, any>(); // Cache of class name -> constructor function
 let scriptContentCache: string | null = null; // Cache of all script tag contents
@@ -79,6 +80,21 @@ export function evalInScope(expr: string, state: Scope, $event?: Event) {
     // If expression fails, warn and return undefined
     // WHY: We don't want broken expressions to crash the entire app
     console.warn("impetus: eval error", expr, e);
+    return undefined;
+  }
+}
+
+export function execInScope(code: string, state: Scope, $event?: Event) {
+  try {
+    let fn = stmtCache.get(code);
+    if (!fn) {
+      // eslint-disable-next-line no-new-func
+      fn = new Function("state", "$event", `with(state){ ${code} }`);
+      stmtCache.set(code, fn);
+    }
+    return (fn as any)(state, $event);
+  } catch (e) {
+    console.warn("impetus: exec error", code, e);
     return undefined;
   }
 }

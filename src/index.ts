@@ -75,16 +75,24 @@ registerRuntimeApi({
 function setupScope(root: Element): void {
   // STEP 1: Parse initial state from the "scope" attribute
   // The scope attribute contains JSON data like: scope="{'name': 'John', 'age': 25}"
-  const attr = root.getAttribute("scope");
+  const attr = root.getAttribute("scope") ?? root.getAttribute("x-data");
   let initial: Scope = {}; // Default to empty object if no scope attribute
   
   if (attr && attr.trim()) {
     try {
       initial = JSON.parse(attr);
     } catch (e) {
-      // If JSON is invalid, warn and use empty object
-      console.warn("impetus: invalid scope JSON", e);
-      initial = {};
+      // Fallback: accept JS object literal (Alpine x-data compatible)
+      // This allows functions, trailing commas, single quotes, etc.
+      try {
+        // eslint-disable-next-line no-new-func
+        const obj = new Function(`return ( ${attr} )` )();
+        if (obj && typeof obj === 'object') initial = obj as Scope;
+        else initial = {};
+      } catch (ee) {
+        console.warn("impetus: invalid scope", ee);
+        initial = {};
+      }
     }
   }
 
@@ -148,7 +156,7 @@ function setupScope(root: Element): void {
  * WHY: We need to find all components on the page and initialize them
  * This is typically called once when the page loads
  */
-export function init(selector: string = "[scope]"): void {
+export function init(selector: string = "[scope],[x-data]"): void {
   // Don't run on server-side (SSR)
   if (typeof document === "undefined") return;
   
@@ -234,9 +242,12 @@ if (typeof document !== 'undefined') {
   const script = document.querySelector('script[type="module"][init]');
   if (script) {
     // Use queueMicrotask to ensure DOM is ready
-    queueMicrotask(async () => {
-      const { init } = await import('./index');
-      init();
+    queueMicrotask(() => {
+      try { init(); }
+      catch {
+        // Fallback: attempt dynamic import if bundler requires it
+        import('./index').then(m => { try { m.init(); } catch {} }).catch(() => {});
+      }
     });
   }
 }
