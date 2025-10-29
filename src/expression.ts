@@ -11,6 +11,10 @@
  * - Resolves component classes from script tags
  */
 
+// TypeScript declaration for devtools flag
+// This tells TypeScript that DEVTOOLS might exist as a global constant
+declare const DEVTOOLS: boolean;
+
 import type { Scope } from './types';
 import { unwrapExpr } from './utils';
 
@@ -21,10 +25,22 @@ import { unwrapExpr } from './utils';
  * This makes the framework fast even with many expressions
  */
 const exprCache = new Map<string, Function>(); // Cache of expression string -> compiled function
-const stmtCache = new Map<string, Function>();
-const computedCache = new WeakMap<Element, Map<string, { value: any; deps: Set<string> }>>(); // Cache for computed properties per component
 const ctorCache = new Map<string, any>(); // Cache of class name -> constructor function
 let scriptContentCache: string | null = null; // Cache of all script tag contents
+
+/**
+ * PROGRAMMATIC CONSTRUCTOR REGISTRATION
+ * 
+ * Allows external code (e.g., SFC loader) to register constructors by name
+ * without assigning to the global object. resolveCtor() will consult this cache.
+ */
+export function registerCtor(name: string, ctor: any): void {
+  try {
+    if (name && typeof ctor === 'function') {
+      ctorCache.set(String(name), ctor);
+    }
+  } catch {}
+}
 
 /**
  * EXPRESSION COMPILER
@@ -96,38 +112,6 @@ export function execInScope(code: string, scope: Scope, $event?: any): any {
     console.warn('impetus: exec error', code, e);
     return undefined;
   }
-}
-
-/**
- * COMPUTED PROPERTY EVALUATOR
- * 
- * This function evaluates computed properties with caching
- * Computed properties are expressions that depend on other state
- * 
- * @param expr - The computed property expression
- * @param state - The component state
- * @param root - The component DOM element
- * @returns The computed value
- * 
- * WHY: Computed properties can be expensive to calculate
- * We cache them so they're only recalculated when dependencies change
- */
-export function evalComputed(expr: string, state: Scope, root: Element): any {
-  // Get or create the cache for this component
-  let cache = computedCache.get(root);
-  if (!cache) {
-    cache = new Map();
-    computedCache.set(root, cache);
-  }
-  
-  // Check if we already have a cached value
-  const cached = cache.get(expr);
-  if (cached !== undefined) return cached.value;
-  
-  // Calculate and cache the value
-  const value = evalInScope(expr, state);
-  cache.set(expr, { value, deps: new Set() });
-  return value;
 }
 
 /**
@@ -244,20 +228,6 @@ export function resolveCtor(name: string): any {
   // Cache the undefined result to avoid repeated searches
   ctorCache.set(name, undefined);
   return undefined;
-}
-
-/**
- * CACHE INVALIDATION
- * 
- * This function clears the computed property cache for a component
- * 
- * @param root - The component DOM element
- * 
- * WHY: When state changes, computed properties might need to be recalculated
- * We clear the cache so they'll be recomputed on next access
- */
-export function invalidateComputedCache(root: Element): void {
-  computedCache.delete(root);
 }
 
 /**

@@ -278,20 +278,11 @@ function wireEventListeners(el: Element, state: Scope, root: Element, listeners:
           }
         });
         
-        // Key filters for keyboard events
-        if ((event === 'keydown' || event === 'keyup' || event === 'keypress') && keyFilters.length) {
-          const e = ev as KeyboardEvent;
-          const ok = keyFilters.some(k => e.key === keyAliases[k]);
-          if (!ok) return;
-        }
-
         // Execute the event expression in component context
         const result = execInScope(value, state, wrapped as any);
         
         // Schedule a re-render in case the event changed state
         stateManager.scheduleRender(root);
-        // Immediate render fallback to ensure visible updates
-        try { getRenderBindings()(state, root); } catch {}
         
         // Return the result for testing (optional)
         return result;

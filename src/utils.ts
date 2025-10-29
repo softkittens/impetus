@@ -310,7 +310,7 @@ export function parseProps(host: Element): Record<string, any> {
     try { props = JSON.parse(raw); } catch { console.warn("impetus: invalid props JSON", raw); }
   }
   for (const { name, value } of Array.from(host.attributes)) {
-    if (name === "use" || name === "template" || name === "props") continue;
+    if (name === "use" || name === "props") continue;
     const key = name.startsWith("data-") || name.startsWith("aria-") ? name : toCamel(name);
     props[key] = coerce(value);
   }

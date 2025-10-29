@@ -81,38 +81,56 @@ A tiny HTML‑first micro‑runtime that turns static pages into interactive UI 
 </script>
 ```
 
-## Component Example (Using template)
+## Single File Components (SFCs)
+
+SFCs allow defining components in external HTML files without global pollution.
+
+### SFC Authoring Example
+
+Create `components/counter.html`:
 
 ```html
-<!-- Component host (the "component") -->
-<div use="Counter" template="counter" max="5"></div>
-
-<!-- Template (can be anywhere on the page) -->
-<template id="counter">
-  <div>Count: {count}</div>
-
-  <!-- Events -->
+<component name="simple-counter">
+  <div>{value}</div>
   <button onclick="inc()">+</button>
   <button onclick="dec()">-</button>
-
-  <div class="text-xs text-gray-500" >Max: {max}</div>
-</template>
-
-<!-- Class definition (can live anywhere; CDN auto‑init will find it) -->
-<script>
-  class Counter {
-    static template = 'counter'
-    constructor(props={}) {
-      this.count = 0
-      this.max = props.max ?? 10
-    }
-    inc() { if (this.count < this.max) this.count++ }
-    dec() { if (this.count > 0) this.count-- }
-    onMount() {}
-    onDestroy() {}
-  }
-</script>
+  <script>
+    // Registers under 'SimpleCounter' automatically (no globals needed)
+    scope(class {
+      constructor({ value = 0 }) { this.value = Number(value) }
+      inc() { this.value++ }
+      dec() { this.value-- }
+    })
+  </script>
+  <style>
+    ::host { background: lime; }
+  </style>
+</component>
 ```
+
+### SFC Usage
+
+```html
+<!-- External SFC (loads from file) -->
+<simple-counter src="./components/counter.html"></simple-counter>
+
+<!-- Inline SFC (defined directly in page, no src needed) -->
+<simple-counter></simple-counter>
+
+<!-- Define inline SFC component -->
+<component name="simple-counter">
+  <div>{value}</div>
+  <button onclick="inc()">+</button>
+  <script>
+    scope(class {
+      constructor({ value = 0 }) { this.value = Number(value) }
+      inc() { this.value++ }
+    })
+  </script>
+</component>
+```
+
+**Notes**: External SFCs load from files and cache fetches by URL. Inline SFCs are defined directly in the page using `<component>` tags.
 
 ## Key Benefits
 - ⚡️ Fast to adopt — One script tag; works on any static page.
@@ -171,7 +189,7 @@ Two-way model (shorthand)
 ## Why Impetus
 - Zero‑setup progressive enhancement for static sites.
 - HTML you already write, just reactive.
-- Class components without a framework tax: constructor props, lifecycle, template resolution.
+- Class components without a framework tax: constructor props, lifecycle, reactive templates.
 - Microtask‑batched updates and per‑root caching keep it fast by default.
 
 ## When to use Impetus
@@ -284,14 +302,11 @@ Transitions
 Two-way model (shorthand)
 - `:value="path"` marks element as model-bound; runtime wires appropriate events and assigns back into scope.
 
-## Components API (use + template)
+## Components API
 
-Attach a class and optionally a template id. Three template patterns are supported:
+Components use their inline HTML content as the template. Define a class and use `use="ClassName"` to instantiate it.
 
-
-
-### 1. Inline Templates
-Use the element's own content as the template - no separate template needed:
+### Inline Component Example
 
 ```html
 <div use="Counter" class="p-4 border rounded">
@@ -310,59 +325,6 @@ Use the element's own content as the template - no separate template needed:
 </script>
 ```
 
-### 2. Template ID as Prop
-Pass template ID via prop for reusable components:
-
-```html
-<template id="card">
-  <div class="card">{title}</div>
-</template>
-
-<div use="Card" template="card" title="Hello"></div>
-
-<script>
-  class Card {
-    // No static template needed - receives via prop
-    constructor(props) {
-      this.title = props.title
-    }
-  }
-</script>
-```
-
-### 3. Traditional Template Reference
-Original pattern with static template or template attribute:
-
-```html
-<template id="counter">
-  <div>Count: {count}</div>
-  <button onclick="inc()">+</button>
-  <button onclick="dec()">-</button>
-</template>
-
-<div use="Counter" template="counter" max="5"></div>
-
-<script>
-  class Counter {
-    static template = 'counter'  // Optional - template attribute takes precedence
-    constructor(props={}) {
-      this.count = 0
-      this.max = props.max ?? 10
-    }
-    inc() { if (this.count < this.max) this.count++ }
-    dec() { if (this.count > 0) this.count-- }
-  }
-</script>
-```
-
-### Template Resolution Priority
-Templates resolve in order:
-1. Host `template` attribute (highest priority)
-2. Inline content (host element content)
-3. Template ID from props (`template="id"` prop)
-4. Static `Class.template` property
-5. Instance `this.template` property (lowest priority)
-
 ### Props and Attributes
 - Props come from `props='{...}'` JSON plus any other attributes (coerced to booleans/numbers when possible)
 - `data-*` and `aria-*` attributes keep their original names (e.g., `data-test` → `data-test`)
@@ -380,8 +342,8 @@ Templates resolve in order:
 - When a reactive proxy is accessed from another root (e.g., `$root` inside `@each` clones), that root is registered as a dependent and will re-render on changes to the shared proxy.
 
 Computed caching
-- Expression results are cached per-root within a render pass.
-- Cache is invalidated automatically before each scheduled render.
+- Expression functions are compiled once and cached globally for reuse.
+- Reactive effects drive updates when state changes; no explicit computed cache.
 
 Global store
 - A shared reactive object exposed as `$store` in every scope and component instance.
@@ -395,7 +357,7 @@ Global store
 - Directive handlers: `@if/@else`, `@show`, `@each` with ordered insertion.
 - Binding collection: attribute and text interpolation per-root.
 - Event wiring: inline `on*` converted to listeners; `$event` proxy; outside-click helper.
-- Components: `use`, props parsing, template resolution, lifecycle hooks (`onMount`, `onDestroy`).
+- Components: `use`, props parsing, lifecycle hooks (`onMount`, `onDestroy`).
 
 ## Performance notes
 
@@ -403,27 +365,12 @@ Global store
 - `@each` respects array identity; preserves order via moving anchor.
 - Prefer `@show` for transient states (loading) to avoid DOM churn.
 - Use computed-like getters for filtered views; Impetus caches expr results per render.
-- Production build strips dev-only heuristics (e.g., heavy ctor resolution) via minification.
-
-## Build scripts
-
-```bash
-# Server-side build (Bun target)
-bun run build
-
-# Browser bundle (minified ESM)
-bun run build:browser
-
-# Watch bundle
-bun run build:watch
-
-# Local server for app/
-bun run serve
-```
+- Production builds use `--define DEVTOOLS=false` and `--drop console --drop debugger` to reduce size.
 
 ## Examples (open after build)
 
 - `/counter.html` – basic component API, props.
+- `/sfc-counter.html` – Single File Components with external HTML.
 - `/inline-components.html` – inline templates, template props, reusable components.
 - `/list.html` – search + filter, `@if/@else`, `@each`.
 - `/tabs.html` – accessible tabs: keyboard (arrow/home/end), `@each`, ARIA.
@@ -442,10 +389,23 @@ bun run serve
 - When to use `@show` vs `@if`?
   `@show` toggles visibility without DOM changes; `@if` mounts/unmounts.
 
-- How does `$event.outside` work?
+- How do I register components without globals?  
+  Use SFCs with `scope(class { ... })` inside the component script. The loader registers under the derived class name (e.g., `simple-counter` → `SimpleCounter`).
+
+- When should I use SFCs vs. inline components?  
+  SFCs for reusable, external components (no global pollution). Inline for simple, page-specific components.
+
+- How does component resolution work?  
+  `use="ClassName"` resolves in order: `window.ClassName` (global), SFC registration via `scope(...)` (derived from SFC `name`), script scanning (finds classes in `<script>` tags).
+
+- How does `$event.outside` work?  
   The `$event` proxy exposes `outside` which is `true` if the click target is outside the bound element.
 
 ---
+
+## Build
+
+For CDN deployment: `bun build src/index.ts --outfile app/impetus.js --target browser --format esm --minify --define DEVTOOLS=false --drop console --drop debugger`
 
 This project was created with Bun v1.3+. See `app/` for examples and `src/runtime.ts` for the core runtime.
 

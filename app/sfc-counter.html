@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Impetus SFC-lite: Counter</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 2rem;
+    }
+  </style>
+</head>
+
+<body>  
+
+  <!-- Demo usage -->
+  <h1>SFC-lite Counter</h1>
+
+  <p>Plain usage (internal state, no src needed):</p>
+  <simple-counter></simple-counter>
+
+  <hr />
+
+  <p>With initial value via literal attribute:</p>
+  <external-counter src="./components/counter.html" value="5"></external-counter>
+
+  <!-- Define SFC component inline (no external file) -->
+  <component name="simple-counter">
+    <div class="inline-flex gap-2 items-center">
+      <button onclick="dec()" class="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-600">-</button>
+      <span class="font-semibold text-lg">{value}</span>
+      <button onclick="inc()" class="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">+</button>
+      <button onclick="value = 0" class="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600">reset</button>
+    </div>
+    <script>
+      scope(class {
+        constructor({ value = 0 }) {
+          this.value = value
+        }
+        inc() { this.value++ }
+        dec() { this.value-- }
+      })
+    </script>
+  </component>
+
+  <script type="module" src="./impetus.js" defer init></script>
+</body>
+
+</html>

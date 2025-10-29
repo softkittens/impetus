@@ -21,7 +21,7 @@
  */
 
 import type { Scope } from './types';
-import { evalInScope, invalidateComputedCache } from './expression';
+import { evalInScope } from './expression';
 import { registerEffect } from './state';
 import { unwrapExpr } from './utils';
 import { DIRECTIVES, PLACEHOLDERS } from './constants';

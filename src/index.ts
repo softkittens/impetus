@@ -25,10 +25,11 @@ import { makeReactive } from './state';         // Makes data reactive (updates 
 import { collectBindingsForRoot, clearBindings } from './bindings';   // Finds and tracks data bindings
 import { renderBindings } from './render';      // Updates the DOM when data changes
 import { wireEventHandlers, removeEventListeners } from './events';   // Handles user interactions (clicks, inputs)
-import { mountComponent, destroyComponent, isComponentInitialized } from './components';     // Manages component lifecycle
+import { mountComponent, destroyComponent } from './components';     // Manages component lifecycle
 import { registerRuntimeApi, getRenderBindings, getWireEventHandlers } from './runtime-api';
 import { setDevtoolsHooks, getDevtoolsHooks } from './devtools-hooks';
 import { stopEffectsForRoot } from './state';
+import { loadSfcComponents } from './sfc'
 export { setDevtoolsHooks, getDevtoolsHooks };
 
 /**
@@ -147,7 +148,7 @@ function setupScope(root: Element): void {
  * WHY: We need to find all components on the page and initialize them
  * This is typically called once when the page loads
  */
-export function init(selector: string = "[scope]"): void {
+export async function init(selector: string = "[scope]"): Promise<void> {
   // Don't run on server-side (SSR)
   if (typeof document === "undefined") return;
   
@@ -170,6 +171,17 @@ export function init(selector: string = "[scope]"): void {
     mountComponent(host, className, inherit);
   }
 
+  // STEP 3: Load and initialize SFC components from src attributes
+  await loadSfcComponents()
+
+  // STEP 4: Re-mount class-based components after defining SFC custom elements
+  const hostsAfter = Array.from(document.querySelectorAll('[use]:not(template):not(script)'))
+  for (const host of hostsAfter) {
+    const className = (host.getAttribute('use') || '').trim();
+    if (!className) continue; // Skip if no class name
+    const inherit = host.hasAttribute('inherit'); // Check for inheritance
+    mountComponent(host, className, inherit);
+  }
 }
 
 /**
@@ -243,15 +255,15 @@ export function __dev_get_bindings(root: Element): { attrs: any[]; interps: any[
  * 
  * The "init" attribute on the script tag triggers automatic initialization
  */
+
 if (typeof document !== 'undefined') {
   const script = document.querySelector('script[type="module"][init]');
   if (script) {
     // Use queueMicrotask to ensure DOM is ready
-    queueMicrotask(() => {
-      try { init(); }
+    queueMicrotask(async () => {
+      try { await init(); }
       catch {
-        // Fallback: attempt dynamic import if bundler requires it
-        import('./index').then(m => { try { m.init(); } catch {} }).catch(() => {});
+        // Fallback removed for size
       }
     });
   }

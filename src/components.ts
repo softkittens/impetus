@@ -99,20 +99,6 @@ export function mountComponent(host: Element, className: string, inherit: boolea
     }
   }
   
-  /**
-   * TEMPLATE RESOLUTION
-   * 
-   * Find and apply the component's template.
-   * 
-   * Precedence (highest → lowest):
-   * 1) Host element attribute: <div use="MyComp" template="my-template"></div>
-   * 2) Inline content: Use the host element's existing children as the template
-   * 3) Template id passed as prop: <div use="MyComp" template="tpl-id"></div>
-   * 4) Static class property (deprecated): class MyComp { static template = 'tpl-id' }
-   * 5) Instance property (deprecated): constructor(){ this.template = 'tpl-id' }
-   */
-  resolveTemplate(host, ctor, instance);
-  
   // Mark the host as initialized
   initialized.add(host);
   
@@ -179,76 +165,6 @@ export function mountComponent(host: Element, className: string, inherit: boolea
       const mountFn = instance && typeof instance.onMount === 'function' ? instance.onMount : null;
       if (mountFn) mountFn.call(reactive, host);
     } catch {} 
-  }
-}
-
-/**
- * TEMPLATE RESOLUTION FUNCTION
- * 
- * This function finds and applies the appropriate template for a component
- * 
- * @param host - The host DOM element
- * @param ctor - The component constructor
- * @param instance - The component instance
- * 
- * WHY: Templates separate structure from behavior
- * They allow components to have reusable HTML layouts
- * 
- * NEW: Supports inline templates - using host element content as template
- */
-function resolveTemplate(host: Element, ctor: any, instance: any): void {
-  // Check for template in order of precedence:
-  // 1. Host element attribute (highest priority)
-  // 2. Inline template (use host element's content as template)
-  // 3. Template id passed as prop
-  // 4. Static class property (deprecated)
-  // 5. Instance property (deprecated)
-  const hostTpl = host.getAttribute('template');
-  
-  if (hostTpl) {
-    // Traditional template reference by ID
-    const tplEl = document.getElementById(String(hostTpl)) as HTMLTemplateElement | null;
-    if (tplEl && tplEl.tagName === 'TEMPLATE') {
-      host.innerHTML = '';
-      host.appendChild(tplEl.content.cloneNode(true));
-    } else {
-      console.warn('impetus: template id not found', hostTpl);
-    }
-  } else if (host.children.length > 0 || host.innerHTML.trim() !== '') {
-    // NEW: Use host element's content as inline template
-    // Don't clone the content - just use it as-is to preserve event handlers
-    // The content will be processed by wireEventHandlers after the component is initialized
-  } else {
-    // Check for template id passed as prop (new pattern)
-    const props = parseProps(host);
-    const tplId = props.template;
-    
-    if (tplId) {
-      const tplEl = document.getElementById(String(tplId)) as HTMLTemplateElement | null;
-      if (tplEl && tplEl.tagName === 'TEMPLATE') {
-        host.innerHTML = '';
-        host.appendChild(tplEl.content.cloneNode(true));
-      } else {
-        console.warn('impetus: template id from props not found', tplId);
-      }
-    } else {
-      // Fallback to static/instance properties (deprecated)
-      const staticTpl = (ctor as any).template;
-      const instTpl = instance && typeof (instance as any).template !== 'undefined'
-        ? (instance as any).template
-        : undefined;
-      const fallbackTplId = staticTpl || instTpl;
-      
-      if (fallbackTplId) {
-        const tplEl = document.getElementById(String(fallbackTplId)) as HTMLTemplateElement | null;
-        if (tplEl && tplEl.tagName === 'TEMPLATE') {
-          host.innerHTML = '';
-          host.appendChild(tplEl.content.cloneNode(true));
-        } else {
-          console.warn('impetus: template id not found', fallbackTplId);
-        }
-      }
-    }
   }
 }
 
